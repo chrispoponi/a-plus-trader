@@ -1,0 +1,121 @@
+//@version=5
+indicator("🔥 Auto Trendlines by Pivots - Perfect Non-Repainting Lines | SPY/QQQ Daily Pro Tool",
+     shorttitle = "Auto Trendlines Pro",
+     overlay = true,
+     max_lines_count = 50,
+     max_labels_count = 50)
+
+// ────────────────────────────────────────────────
+// INPUTS - Fully Customizable
+// ────────────────────────────────────────────────
+pivotLeft   = input.int(5, "Pivot Left Bars", minval=2, maxval=20, group="Pivot Settings")
+pivotRight  = input.int(5, "Pivot Right Bars", minval=2, maxval=20, group="Pivot Settings")
+maxTLines   = input.int(8, "Max Trendlines (Support + Resistance)", minval=4, maxval=20, group="Display")
+lineExtend  = input.int(100, "Line Extension (Bars Right)", minval=50, maxval=500, group="Display")
+lineWidth   = input.int(2, "Line Width", minval=1, maxval=4, group="Display")
+showLabels  = input.bool(true, "Show Pivot Labels (R/S)", group="Display")
+minAngle    = input.float(15, "Min Trend Angle (degrees)", minval=5, maxval=45, group="Filter")
+
+// Colors
+resColor = input.color(color.new(color.red, 20), "Resistance Color", group="Colors")
+supColor = input.color(color.new(color.green, 20), "Support Color", group="Colors")
+
+// ────────────────────────────────────────────────
+// PIVOT DETECTION (Non-Repainting)
+// ────────────────────────────────────────────────
+pivotHigh = ta.pivothigh(high, pivotLeft, pivotRight)
+pivotLow  = ta.pivotlow(low, pivotLeft, pivotRight)
+
+// ────────────────────────────────────────────────
+// ARRAYS FOR PIVOT STORAGE (Last N Pivots)
+// ────────────────────────────────────────────────
+var array<float> highPivots = array.new<float>()
+var array<int>   highBars   = array.new<int>()
+var array<float> lowPivots  = array.new<float>()
+var array<int>   lowBars    = array.new<int>()
+
+// Update pivot highs array
+if not na(pivotHigh)
+    array.unshift(highPivots, pivotHigh)
+    array.unshift(highBars, bar_index - pivotRight)
+    if array.size(highPivots) > maxTLines
+        array.pop(highPivots)
+        array.pop(highBars)
+
+// Update pivot lows array
+if not na(pivotLow)
+    array.unshift(lowPivots, pivotLow)
+    array.unshift(lowBars, bar_index - pivotRight)
+    if array.size(lowPivots) > maxTLines
+        array.pop(lowPivots)
+        array.pop(lowBars)
+
+// ────────────────────────────────────────────────
+// DRAW TRENDLINES (Connect Consecutive Pivots)
+// ────────────────────────────────────────────────
+var line[] trendLines = array.new<line>()
+
+// Function to calculate slope/angle and draw line
+f_drawTrendline(x1, y1, x2, y2, col) =>
+    // Calculate slope and angle
+    slope = (y2 - y1) / (x2 - x1)
+    angle = math.atan(slope) * 180 / math.pi  // in degrees
+    
+    // Filter by minimum angle (avoids flat lines)
+    validAngle = math.abs(angle) >= minAngle
+    
+    if validAngle and barstate.isconfirmed
+        newLine = line.new(
+             x1 = x1, y1 = y1,
+             x2 = x2, y2 = y2,
+             extend = extend.right,
+             color  = col,
+             width  = lineWidth,
+             style  = line.style_solid)
+        
+        array.push(trendLines, newLine)
+        // Limit total lines
+        if array.size(trendLines) > maxTLines * 2
+            oldLine = array.shift(trendLines)
+            line.delete(oldLine)
+
+// Draw resistance trendlines (connect consecutive pivot highs)
+if array.size(highPivots) >= 2
+    for i = 0 to math.min(1, array.size(highPivots) - 2)
+        x1 = array.get(highBars, i)
+        y1 = array.get(highPivots, i)
+        x2 = array.get(highBars, i + 1)
+        y2 = array.get(highPivots, i + 1)
+        f_drawTrendline(x1, y1, x2, y2, resColor)
+
+// Draw support trendlines (connect consecutive pivot lows)
+if array.size(lowPivots) >= 2
+    for i = 0 to math.min(1, array.size(lowPivots) - 2)
+        x1 = array.get(lowBars, i)
+        y1 = array.get(lowPivots, i)
+        x2 = array.get(lowBars, i + 1)
+        y2 = array.get(lowPivots, i + 1)
+        f_drawTrendline(x1, y1, x2, y2, supColor)
+
+// ────────────────────────────────────────────────
+// PIVOT LABELS (Optional)
+// ────────────────────────────────────────────────
+if showLabels and not na(pivotHigh)
+    label.new(
+         x         = bar_index - pivotRight,
+         y         = pivotHigh,
+         text      = "R",
+         style     = label.style_label_down,
+         color     = color.new(color.red, 0),
+         textcolor = color.white,
+         size      = size.small)
+
+if showLabels and not na(pivotLow)
+    label.new(
+         x         = bar_index - pivotRight,
+         y         = pivotLow,
+         text      = "S",
+         style     = label.style_label_up,
+         color     = color.new(color.green, 0),
+         textcolor = color.white,
+         size      = size.small)

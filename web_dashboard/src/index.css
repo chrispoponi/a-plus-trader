@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pro-dark: #0f172a;
+  --color-pro-card: #1e293b;
+  --color-pro-accent: #3b82f6;
+  --color-pro-success: #10b981;
+  --color-pro-danger: #ef4444;
+  --color-pro-warning: #f59e0b;
+
+  --font-sans: 'Inter', sans-serif;
+}
+
+/* 
+  In Tailwind 4, we don't use @apply in @layer base for custom theme values 
+  without extra setup. 
+  We will move the body classes to index.html 
+*/
