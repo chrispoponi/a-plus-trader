@@ -21,45 +21,60 @@ class OptionsEngine:
         
         # Strategy Selection Logic
         strategy = None
-        if close > sma50 and close > ema20:
+        direction = Direction.LONG
+        
+        # Calculate Trend State
+        is_bullish = close > sma50 and close > ema20
+        is_bearish = close < sma50 and close < ema20
+        
+        if is_bullish:
             strategy = "Bull Put Spread"
             direction = Direction.LONG
-        elif close < sma50 and close < ema20:
+        elif is_bearish:
             strategy = "Bear Call Spread"
             direction = Direction.SHORT
         else:
-            strategy = "Iron Condor" # Range bound
-            direction = Direction.LONG # Neutral usually treated as long for scaffolding
+            # RANGE BOUND -> IRON CONDOR
+            strategy = "Iron Condor" 
+            direction = Direction.LONG # Neutral
             
-        # Mock Option Chain Analysis
+        # Mock Option Chain Analysis (Simulating the Greeks)
         # Real logic would query chain, find deltas 0.20/0.05
         
-        # If Bull Put Spread:
-        # Sell 450 Put, Buy 440 Put
-        credit = 1.50
-        width = 10.0
+        if strategy == "Iron Condor":
+            # Short Put 440, Long Put 430
+            # Short Call 480, Long Call 490
+            credit = 2.10
+            width = 10.0
+            pop = 68.0 # Condors usually have slightly lower POP than singular spreads, but higher credit
+            if pop < 65.0: return None 
+        else:
+            # If Bull Put Spread:
+            # Sell 450 Put, Buy 440 Put
+            credit = 1.50
+            width = 10.0
+            pop = 72.5
+            if pop < 70.0: return None
+
         max_loss = (width - credit) * 100
         max_gain = credit * 100
-        pop = 72.5 # Estimated
-        
-        if pop < 70.0: return None # Strict rule
         
         return Candidate(
             section=Section.OPTIONS,
             symbol=symbol,
             setup_name=f"High Prob {strategy}",
             direction=direction,
-            thesis=f"{strategy} selected based on trend. POP estimated at {pop}%. Defined risk.",
+            thesis=f"{strategy} selected. Market is '{'Trending' if is_bullish or is_bearish else 'Ranging'}' (Close vs 50SMA). POP {pop}%.",
             features=data,
             trade_plan=TradePlan(
                 entry=credit, # Net credit
-                stop_loss=credit * 2.0, # 2x credit stop
+                stop_loss=credit * 2.5 if strategy == "Iron Condor" else credit * 2.0, # Condors need wider stops
                 take_profit=credit * 0.5, # 50% profit
                 risk_percent=settings.MAX_RISK_PER_TRADE_PERCENT
             ),
             options_details=OptionsDetails(
                 strategy_type=strategy,
-                strikes=[450.0, 440.0],
+                strikes=[440, 430, 480, 490] if strategy == "Iron Condor" else [450, 440],
                 expiration_date="2024-02-16",
                 dte=45,
                 pop_estimate=pop,
@@ -83,8 +98,16 @@ class OptionsEngine:
         candidates = []
         for symbol in symbols:
             # Mock Data
-            if symbol in ["NVDA", "SPY"]:
-                data = {"close": 460.0, "ema20": 458.0, "sma50": 430.0} # Bullish
+            if symbol == "SPY":
+                # Force "Choppy" data to test Iron Condor
+                # Close is BETWEEN 20 and 50
+                data = {"close": 445.0, "ema20": 450.0, "sma50": 440.0, "adv": 50000000} 
                 res = self.analyze(symbol, data)
                 if res: candidates.append(res)
+            elif symbol == "NVDA":
+                 # Trend Data
+                 data = {"close": 460.0, "ema20": 458.0, "sma50": 430.0, "adv": 50000000}
+                 res = self.analyze(symbol, data)
+                 if res: candidates.append(res)
+
         return candidates

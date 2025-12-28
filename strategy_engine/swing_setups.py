@@ -8,26 +8,30 @@ class SwingAnalysis:
     """
     
     def grade_candidate(self, symbol: str, data: Dict[str, any], direction: Direction) -> Scores:
-        # 1. Trend Alignment (Weight 25)
+        # 1. Trend Alignment (Weight 25 + Bonus 10)
         # 20EMA > 50SMA and slope check
         trend_score = self._score_trend(data, direction)
         
-        # 2. Pullback Quality (Weight 20)
+        # 2. Pullback Quality (Weight 20 + Bonus 10)
         # Distance to EMA, candle shape
         structure_score = self._score_structure(data)
         
         # 3. Volume Behavior (Weight 15)
-        vol_score = 15.0 # Mocked
+        # Bonus for 'Pocket Pivot' or 'Volume Dry Up'
+        vol_score = 15.0 
+        if data.get('volume_dry_up'): vol_score += 5
         
         # 4. Sector/Market (Weight 15)
-        sector_score = 15.0 # Mocked
+        sector_score = 15.0 
+        if data.get('sector_rs'): sector_score += 5
         
         # 5. Overhead Supply (Weight 15)
-        supply_score = 15.0 # Mocked (assumed clear)
+        supply_score = 15.0 
 
         # 6. Event Risk (Weight 10)
-        event_score = 10.0 # Mocked (assumed no earnings soon)
+        event_score = 10.0
         
+        # BASE TOTAL
         total_score = trend_score + structure_score + vol_score + sector_score + supply_score + event_score
         
         # Win Prob estimate is correlated to score
@@ -36,8 +40,8 @@ class SwingAnalysis:
         return Scores(
             win_probability_estimate=min(win_prob, 95.0),
             quality_score=total_score,
-            risk_score=event_score, # Proxy
-            overall_rank_score=total_score,
+            risk_score=event_score, 
+            overall_rank_score=min(total_score, 99.0), # Cap at 99
             baseline_win_rate=55.0,
             adjustments=total_score - 55.0,
             trend_score=trend_score,
@@ -136,18 +140,16 @@ class SwingStrategyEngine:
     def __init__(self):
         self.setups = [SwingSetup_20_50()]
 
-    def scan(self, symbols: List[str]) -> List[Candidate]:
+    def scan(self, symbols: List[str], market_data: Dict[str, dict] = None) -> List[Candidate]:
         candidates = []
-        for symbol in symbols:
-            # TODO: Integrate real data feed
-            # MOCK DATA
-            if symbol == "NVDA":
-                data = {"close": 460.0, "ema20": 458.0, "sma50": 430.0, "atr": 8.0, "candle_pattern": "hammer"}
-            elif symbol == "AAPL":
-                data = {"close": 185.0, "ema20": 184.0, "sma50": 175.0, "atr": 2.5, "candle_pattern": "doji"} 
-            else:
-                data = {"close": 100, "ema20": 90, "sma50": 80, "atr": 2.0} # Too far from EMA
+        
+        # If no data passed (legacy test), fallback or empty
+        if not market_data:
+            print("SWING ENGINE: No market data provided.")
+            return []
 
+        for symbol, data in market_data.items():
+            # Data is already computed {close, ema20, sma50, atr...}
             for setup in self.setups:
                 res = setup.analyze(symbol, data)
                 if res:

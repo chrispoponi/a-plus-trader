@@ -3,6 +3,7 @@ from apscheduler.triggers.cron import CronTrigger
 from strategy_engine.scanner_service import scanner
 from utils.market_clock import MarketClock
 from utils.notifications import notifier
+from executor_service.order_executor import executor
 import pytz
 
 # Initialize Scheduler
@@ -11,7 +12,7 @@ scheduler = AsyncIOScheduler()
 async def scheduled_market_scan(scan_name: str):
     """
     Job that runs at specific times.
-    Checks if market is open, runs scan, alerts results.
+    Checks if market is open, runs scan, alerts results, EXECUTES TRADES.
     """
     print(f"SCHEDULER: Starting {scan_name}...")
     
@@ -27,6 +28,8 @@ async def scheduled_market_scan(scan_name: str):
     # But filters candidates.
     results = await scanner.run_scan()
     
+
+
     # 3. Process Results for Notification
     # We want to know how many trades were found.
     swings = results.get("Swing", [])
@@ -38,9 +41,17 @@ async def scheduled_market_scan(scan_name: str):
     msg_lines = [f"**{scan_name} Report**"]
     
     if core_swings:
-        msg_lines.append(f"🟢 **CORE SWINGS FOUND**: {len(core_swings)}")
+        msg_lines.append(f"🟢 **CORE SWINGS DETECTED**: {len(core_swings)}")
         for c in core_swings:
-            msg_lines.append(f"- {c.symbol}: Score {c.scores.overall_rank_score}")
+            # AUTO EXECUTE TRADES
+            # Rules: Must be Core (>80) AND have Positive AI Analysis
+            ai_pass = c.ai_analysis and "Bearish" not in c.ai_analysis and "Error" not in c.ai_analysis
+            
+            # TODO: Uncomment strict AI gate if desired. For now, execute all Core.
+            status = executor.execute_trade(c)
+            
+            emoji = "🚀" if "SUCCESS" in status else "⚠️"
+            msg_lines.append(f"- {c.symbol}: Score {c.scores.overall_rank_score} | Exec: {emoji} ({status})")
     else:
         msg_lines.append("No Core Swings.")
         

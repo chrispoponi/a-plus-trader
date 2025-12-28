@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
-import { Server, Database, Activity, FileText, Smartphone } from 'lucide-react';
+import { Server, Database, Activity, FileText } from 'lucide-react';
+import BotControls from '../components/BotControls';
 
 const ControlCenter = () => {
     const [uploads, setUploads] = useState({});
@@ -115,19 +116,18 @@ const ControlCenter = () => {
                 </div>
             </div>
 
+
+
             {/* BOTTOM ROW: BOT INTERFACE (FULL WIDTH) */}
-            <div className="bg-pro-card p-5 rounded-xl border border-gray-700">
-                <div className="flex items-center gap-2 mb-4 text-white font-semibold">
-                    <Smartphone className="w-5 h-5 text-purple-400" />
-                    <h3>Bot Interface (Backend API)</h3>
-                </div>
-                <div className="w-full bg-white rounded-lg overflow-hidden relative" style={{ height: '600px' }}>
-                    <iframe
-                        src="http://localhost:8000/docs"
-                        className="w-full h-full border-0"
-                        title="Backend Docs"
-                    />
-                </div>
+            <div className="bg-pro-card p-5 rounded-xl border border-gray-700 min-h-[400px]">
+                <BotControls onRefresh={() => {
+                    // Trigger a refresh of the upload list
+                    const fetchData = async () => {
+                        const files = await api.getUploads();
+                        setUploads(files);
+                    };
+                    fetchData();
+                }} />
             </div>
         </div>
     );

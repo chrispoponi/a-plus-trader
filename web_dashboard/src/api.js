@@ -29,5 +29,16 @@ export const api = {
             console.error("Fetch Uploads Failed", error);
             return {};
         }
+    },
+    uploadFile: async (endpoint, formData) => {
+        try {
+            const res = await axios.post(`${API_BASE_URL}/upload/${endpoint}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            return res.data;
+        } catch (error) {
+            console.error(`Upload to ${endpoint} Failed`, error);
+            throw error;
+        }
     }
 };
