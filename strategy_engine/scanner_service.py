@@ -76,6 +76,11 @@ class ScannerService:
             # 3. GET REAL DATA (The Heart Transplant)
             market_data = data_loader.fetch_snapshot(target_symbols)
             
+            # [DEBUG MARKER] - Create a timestamp string
+            import datetime
+            scan_ts = datetime.datetime.now().strftime("%H:%M:%S")
+            print(f"DEBUG: Data Fetched at {scan_ts}")
+            
             # INTEGRATE VDUBUS FILTER
             for sym, data in market_data.items():
                 # TODO: Pass full DF if Vdubus needs history, for now we skip complex momentum
@@ -110,6 +115,9 @@ class ScannerService:
         # Pick CORE Trades (Top 2 if score >= 80)
         core_count = 0
         for cand in valid_swing:
+            # [DEBUG MARKER]
+            cand.setup.setup_name = f"{cand.setup.setup_name} | @{scan_ts}"
+            
             is_core = False
             if core_count < 2 and cand.scores.overall_rank_score >= settings.MIN_A_PLUS_SWING_SCORE:
                 cand.trade_plan.is_core_trade = True
