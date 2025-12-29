@@ -21,7 +21,7 @@ app.add_middleware(
 app.include_router(upload_router)
 app.include_router(automation_router)
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
     return {
         "status": "system_active", 
