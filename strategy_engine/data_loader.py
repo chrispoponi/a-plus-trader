@@ -41,7 +41,8 @@ class DataLoader:
                 TimeFrame.Day,
                 start=start_date,
                 end=end_date,
-                adjustment='raw'
+                adjustment='raw',
+                feed='iex'
             ).df
             
             if bars.empty:

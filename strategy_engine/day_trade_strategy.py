@@ -49,10 +49,6 @@ class DayTradeEngine:
 
     def scan(self, symbols: List[str]) -> List[Candidate]:
         candidates = []
-        for symbol in symbols:
-            # Mock Data
-            if symbol == "TSLA":
-                data = {"close": 240.50, "vwap": 240.00, "rvol": 2.5} # A+ Setup
-                res = self.analyze(symbol, data)
-                if res: candidates.append(res)
+        # TODO: Implement Real Day Trade Scanning (Requires Intraday 1min/5min Data)
+        # We currently only fetch Daily Data, so Day Trade logic is inactive for MVP.
         return candidates
