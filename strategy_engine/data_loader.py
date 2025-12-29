@@ -34,45 +34,51 @@ class DataLoader:
         print(f"DEBUG: Fetching data for {len(symbols)} symbols...")
         
         # Alpaca allows chunking, but for <100 symbols one call might work or we loop
-        # We'll simple loop or chunk if needed. REST.get_bars handles multi symbols.
-        try:
-            bars = self.api.get_bars(
-                symbols,
-                TimeFrame.Day,
-                start=start_date,
-                end=end_date,
-                adjustment='raw',
-                feed='iex'
-            ).df
-            
-            if bars.empty:
-                print("DEBUG: No data returned from Alpaca.")
-                return {}
-
-            # Process per symbol
-            # Alpaca multi-symbol DF has a 'symbol' column
-            for symbol in symbols:
-                if symbol not in bars.index.get_level_values(0) and 'symbol' in bars.columns:
-                     # Re-indexing might be needed depending on SDK version, 
-                     # usually it comes as MultiIndex or 'symbol' column
-                     sym_data = bars[bars['symbol'] == symbol].copy()
-                elif isinstance(bars.index, pd.MultiIndex):
-                     try:
-                        sym_data = bars.xs(symbol)
-                     except:
-                        continue
-                else:
-                    # Fallback
+        # We'll batch to be safe and prevent timeouts on Render Free Tier
+        chunk_size = 10
+        chunks = [symbols[i:i + chunk_size] for i in range(0, len(symbols), chunk_size)]
+        
+        for chunk in chunks:
+            try:
+                print(f"DEBUG: Fetching chunk of {len(chunk)} symbols...")
+                bars = self.api.get_bars(
+                    chunk,
+                    TimeFrame.Day,
+                    start=start_date,
+                    end=end_date,
+                    adjustment='raw',
+                    feed='iex'
+                ).df
+                
+                if bars.empty:
+                    print("DEBUG: Chunk returned empty.")
                     continue
 
-                if len(sym_data) < 55:
-                    continue # Not enough data for SMA50
+                # Process per symbol
+                for symbol in chunk:
+                    # Handle MultiIndex logic
+                    if isinstance(bars.index, pd.MultiIndex):
+                        try:
+                            # Alpaca SDK usually sets symbol as index level 0
+                            # But sometimes it's a column if we reset index?
+                            # Standard SDK behavior:
+                            sym_data = bars.xs(symbol)
+                        except KeyError:
+                             continue
+                    elif 'symbol' in bars.columns:
+                        sym_data = bars[bars['symbol'] == symbol].copy()
+                    else:
+                        continue # Unknown format
 
-                processed_data = self._calculate_technicals(sym_data)
-                results[symbol] = processed_data
+                    if len(sym_data) < 55:
+                        continue # Not enough data for SMA50
 
-        except Exception as e:
-            print(f"Data Fetch Error: {e}")
+                    processed_data = self._calculate_technicals(sym_data)
+                    results[symbol] = processed_data
+                    
+            except Exception as e:
+                print(f"Data Fetch Error (Chunk): {e}")
+                continue # Skip bad chunk, keep going
             
         return results
 

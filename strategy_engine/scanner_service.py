@@ -50,134 +50,147 @@ class ScannerService:
         return list(symbols)
 
     async def run_scan(self) -> Dict[str, List[Candidate]]:
-        print("DEBUG: run_scan() triggered via Scheduler or API. Starting...")
-        # Refresh symbol list from automation drops
-        target_symbols = self.get_target_symbols()
-        print(f"DEBUG: Scanning {len(target_symbols)} symbols (Base + Automation)")
-
-        # 1. Analyze Market Context (SPY/QQQ)
-        print("DEBUG: Analyzing Market Context (SPY/QQQ Post-ATH)...")
-        # TODO: Feed real SPY Daily Data to self.breakout_engine.analyze(spy_df)
-        market_safe = True 
-
-        # 2. Check Time & Rules
-        segment = MarketClock.get_market_segment()
-        print(f"DEBUG: Current Market Segment: {segment}")
-        
-        allow_swing, reason_swing = TradingRules.can_trade_section(Section.SWING, segment)
-        allow_options, reason_options = TradingRules.can_trade_section(Section.OPTIONS, segment)
-        allow_day, reason_day = TradingRules.can_trade_section(Section.DAY_TRADE, segment)
-        
-        raw_swing = []
-        raw_options = []
-        raw_day = []
-
-        if allow_swing and market_safe:
-            # 3. GET REAL DATA (The Heart Transplant)
-            market_data = data_loader.fetch_snapshot(target_symbols)
-            
-            # [DEBUG MARKER] - Create a timestamp string
-            import datetime
-            scan_ts = datetime.datetime.now().strftime("%H:%M:%S")
-            print(f"DEBUG: Data Fetched at {scan_ts}")
-            
-            # INTEGRATE VDUBUS FILTER
-            for sym, data in market_data.items():
-                # TODO: Pass full DF if Vdubus needs history, for now we skip complex momentum
-                pass
-            
-            # 4. Strategy Scan
-            # We pass the full Dictionary of Data to the engines so they don't have to fetch again
-            raw_swing = self.swing_engine.scan(target_symbols, market_data)
-        else:
-            reason = reason_swing if not allow_swing else "Market Context Unsafe (ATH Pullback Deep)"
-            print(f"Skipping Swing Scan: {reason}")
-
-        if allow_options and market_safe:
-            raw_options = self.options_engine.scan(target_symbols)
-        else:
-            reason = reason_options if not allow_options else "Market Context Unsafe (ATH Pullback Deep)"
-            print(f"Skipping Options Scan: {reason}")
-            
-        if allow_day:
-            raw_day = self.day_engine.scan(target_symbols)
-        else:
-            print(f"Skipping Day Trade Scan: {reason_day}")
-        
-        # --- SWING SELECTION (CORE LOGIC) ---
-        swing_final = []
-        # Sort by score
-        raw_swing.sort(key=lambda c: c.scores.overall_rank_score, reverse=True)
-        
-        # Filter Min Score
-        valid_swing = [c for c in raw_swing if c.scores.overall_rank_score >= settings.MIN_SWING_SCORE]
-        
-        # Pick CORE Trades (Top 2 if score >= 80)
-        core_count = 0
-        for cand in valid_swing:
-            # [DEBUG MARKER]
-            cand.setup.setup_name = f"{cand.setup.setup_name} | @{scan_ts}"
-            
-            is_core = False
-            if core_count < 2 and cand.scores.overall_rank_score >= settings.MIN_A_PLUS_SWING_SCORE:
-                cand.trade_plan.is_core_trade = True
-                cand.trade_plan.risk_percent = settings.CORE_RISK_PER_TRADE_PERCENT
-                is_core = True
-                core_count += 1
-            else:
-                 cand.trade_plan.risk_percent = settings.MAX_RISK_PER_TRADE_PERCENT
-            
-            # AI SANITY CHECK
-            if is_core:
-                try:
-                    cand.ai_analysis = await llm_analyzer.analyze_candidate(cand)
-                except Exception as e:
-                    print(f"AI Analysis Failed: {e}")
-                    cand.ai_analysis = "AI Analysis Error"
-
-            swing_final.append(cand)
-            
-        # --- OPTIONS SELECTION ---
-        # PASS REAL MARKET DATA
-        raw_options = self.options_engine.scan(target_symbols, market_data)
-        options_final = raw_options[:3] 
-
-        # --- DAY SELECTION ---
-        # TODO: Pass market_data to day_engine if refactored
-        day_final = raw_day[:3] 
-        
-        # [SYSTEM STATUS CARD]
-        # Inject detailed info card at the top of SWING results for Dashboard Visibility
         try:
-            sample_ticker = "AAPL"
-            sample_price = "N/A"
-            if market_data and sample_ticker in market_data:
-                sample_price = f"${market_data[sample_ticker]['close']}"
+            print("DEBUG: run_scan() triggered via Scheduler or API. Starting...")
+            # Refresh symbol list from automation drops
+            target_symbols = self.get_target_symbols()
+            print(f"DEBUG: Scanning {len(target_symbols)} symbols (Base + Automation)")
+
+            # 1. Analyze Market Context (SPY/QQQ)
+            print("DEBUG: Analyzing Market Context (SPY/QQQ Post-ATH)...")
+            market_safe = True 
+
+            # 2. Check Time & Rules
+            segment = MarketClock.get_market_segment()
+            print(f"DEBUG: Current Market Segment: {segment}")
+            
+            allow_swing, reason_swing = TradingRules.can_trade_section(Section.SWING, segment)
+            allow_options, reason_options = TradingRules.can_trade_section(Section.OPTIONS, segment)
+            allow_day, reason_day = TradingRules.can_trade_section(Section.DAY_TRADE, segment)
+            
+            raw_swing = []
+            raw_options = []
+            raw_day = []
+
+            # 3. GET REAL DATA (The Heart Transplant)
+            # We fetch data even if swing disallowed, because Options need it too
+            market_data = {}
+            scan_ts = "N/A"
+            if allow_swing or allow_options:
+                market_data = data_loader.fetch_snapshot(target_symbols)
                 
-            info_setup = Candidate(
+                # [DEBUG MARKER] - Create a timestamp string
+                import datetime
+                scan_ts = datetime.datetime.now().strftime("%H:%M:%S")
+                print(f"DEBUG: Data Fetched at {scan_ts}. Active Tickers: {len(market_data)}")
+
+            if allow_swing: # and market_safe:
+                raw_swing = self.swing_engine.scan(target_symbols, market_data)
+            else:
+                reason = reason_swing if not allow_swing else "Market Context Unsafe"
+                print(f"Skipping Swing Scan: {reason}")
+
+            if allow_options: # and market_safe:
+                raw_options = self.options_engine.scan(target_symbols, market_data)
+            else:
+                reason = reason_options if not allow_options else "Market Context Unsafe"
+                print(f"Skipping Options Scan: {reason}")
+                
+            if allow_day:
+                # TODO: Pass Day Data
+                raw_day = self.day_engine.scan(target_symbols)
+            else:
+                print(f"Skipping Day Trade Scan: {reason_day}")
+            
+            # --- SWING SELECTION (CORE LOGIC) ---
+            swing_final = []
+            # Sort by score
+            raw_swing.sort(key=lambda c: c.scores.overall_rank_score, reverse=True)
+            
+            # Filter Min Score
+            valid_swing = [c for c in raw_swing if c.scores.overall_rank_score >= settings.MIN_SWING_SCORE]
+            
+            # Pick CORE Trades (Top 2 if score >= 80)
+            core_count = 0
+            for cand in valid_swing:
+                # [DEBUG MARKER]
+                cand.setup.setup_name = f"{cand.setup.setup_name} | @{scan_ts}"
+                
+                is_core = False
+                if core_count < 2 and cand.scores.overall_rank_score >= settings.MIN_A_PLUS_SWING_SCORE:
+                    cand.trade_plan.is_core_trade = True
+                    cand.trade_plan.risk_percent = settings.CORE_RISK_PER_TRADE_PERCENT
+                    is_core = True
+                    core_count += 1
+                else:
+                     cand.trade_plan.risk_percent = settings.MAX_RISK_PER_TRADE_PERCENT
+                
+                # AI SANITY CHECK
+                if is_core:
+                    try:
+                        cand.ai_analysis = await llm_analyzer.analyze_candidate(cand)
+                    except Exception as e:
+                        print(f"AI Analysis Failed: {e}")
+                        cand.ai_analysis = "AI Analysis Error"
+
+                swing_final.append(cand)
+                
+            # --- OPTIONS SELECTION ---
+            options_final = raw_options[:3] 
+
+            # --- DAY SELECTION ---
+            day_final = raw_day[:3] 
+            
+            # [SYSTEM STATUS CARD]
+            try:
+                sample_ticker = "AAPL"
+                sample_price = "N/A"
+                if market_data and sample_ticker in market_data:
+                    sample_price = f"${market_data[sample_ticker]['close']}"
+                    
+                info_setup = Candidate(
+                    section=Section.SWING,
+                    symbol="SYSTEM",
+                    setup_name=f"SCAN REPORT @ {scan_ts}",
+                    direction=Direction.LONG,
+                    thesis=f"Source: Alpaca API. Universe: {len(target_symbols)}. Active Data: {len(market_data)}. AAPL Check: {sample_price}",
+                    features={},
+                    trade_plan=TradePlan(entry=0, stop_loss=0, take_profit=0, risk_percent=0),
+                    scores=Scores(overall_rank_score=100.0, win_probability_estimate=100.0, quality_score=100.0, risk_score=0, baseline_win_rate=0, adjustments=0),
+                    compliance=Compliance(passed_thresholds=True),
+                    signal_id="SYSTEM_INFO"
+                )
+                swing_final.insert(0, info_setup)
+            except Exception as e:
+                print(f"Error creating Info Card: {e}")
+
+            results = {
+                Section.SWING.value: swing_final,
+                Section.OPTIONS.value: options_final,
+                Section.DAY_TRADE.value: day_final
+            }
+            return results
+
+        except Exception as e:
+            # FATAL ERROR CATCHER
+            import traceback
+            traceback.print_exc()
+            error_card = Candidate(
                 section=Section.SWING,
-                symbol="SYSTEM",
-                setup_name=f"SCAN REPORT @ {scan_ts}",
+                symbol="ERROR",
+                setup_name="CRITICAL SCAN FAILURE",
                 direction=Direction.LONG,
-                thesis=f"Source: Alpaca API. Universe: {len(target_symbols)}. Active Data: {len(market_data)}. AAPL Check: {sample_price}",
+                thesis=f"Exception: {str(e)}",
                 features={},
                 trade_plan=TradePlan(entry=0, stop_loss=0, take_profit=0, risk_percent=0),
-                scores=Scores(overall_rank_score=100.0, win_probability_estimate=100.0, quality_score=100.0, risk_score=0, baseline_win_rate=0, adjustments=0),
+                scores=Scores(overall_rank_score=0, win_probability_estimate=0, quality_score=0, risk_score=0, baseline_win_rate=0, adjustments=0),
                 compliance=Compliance(passed_thresholds=True),
-                signal_id="SYSTEM_INFO"
+                signal_id="SYSTEM_ERROR"
             )
-            # Prepend to list
-            swing_final.insert(0, info_setup)
-            
-        except Exception as e:
-            print(f"Error creating Info Card: {e}")
-
-        results = {
-            Section.SWING.value: swing_final,
-            Section.OPTIONS.value: options_final,
-            Section.DAY_TRADE.value: day_final
-        }
-        
-        return results
+            return {
+                Section.SWING.value: [error_card],
+                Section.OPTIONS.value: [],
+                Section.DAY_TRADE.value: []
+            }
 
 scanner = ScannerService()
