@@ -15,6 +15,7 @@ from scoring.llm_analysis import llm_analyzer
 from strategy_engine.indicators.vdubus_engine import VdubusEngine
 from strategy_engine.indicators.breakout_engine import BreakoutEngine
 from strategy_engine.data_loader import data_loader
+from strategy_engine.market_hunter import MarketHunter
 
 class ScannerService:
     def __init__(self):
@@ -23,16 +24,16 @@ class ScannerService:
         self.day_engine = DayTradeEngine()
         self.vdubus_engine = VdubusEngine()
         self.breakout_engine = BreakoutEngine()
-        # Default Stub symbols
-        self.default_symbols = ["AAPL", "TSLA", "NVDA", "SPY", "AMD", "META", "MSFT", "GOOGL"]
+        self.hunter = MarketHunter()
     
     def get_target_symbols(self) -> List[str]:
         """
-        Merges default symbols with any fresh drops from ChatGPT automation.
+        Merges Hunted symbols with any fresh drops from ChatGPT automation.
         """
-        symbols = set(self.default_symbols)
+        # 1. Run The Hunter (Autonomous Discovery)
+        symbols = set(self.hunter.hunt())
         
-        # Check upload folder for JSON drops
+        # 2. Add Automation Drops (ChatGPT / Manual)
         drop_files = glob.glob("uploads/chatgpt_automation/*.json")
         for fpath in drop_files:
             try:
