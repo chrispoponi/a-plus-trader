@@ -34,51 +34,56 @@ class MarketHunter:
         """
         Main entry point. Returns a list of ~20-30 high-quality tickers.
         """
-        print("\n🔎 HUNT: Initiating Autonomous Market Hunt...")
+        print("\n🔎 HUNT [DEBUG]: Initiating Autonomous Market Hunt...")
         candidates = []
         
         # 1. Primary: Finviz
         if FINVIZ_AVAILABLE:
             try:
+                print("🔎 HUNT [DEBUG]: Attempting Finviz Screener...")
                 candidates = self._run_finviz_screener()
+                print(f"🔎 HUNT [DEBUG]: Finviz returned {len(candidates)} candidates.")
             except Exception as e:
-                print(f"⚠️ HUNT: Finviz Failed ({e}).")
+                print(f"⚠️ HUNT [ERROR]: Finviz Failed ({e}).")
+        else:
+             print("⚠️ HUNT [DEBUG]: Finviz library not available.")
         
         # 2. Fallback: YFinance Scan of Core List
         # If Finviz returned too few (<5) or failed, run the internal scanner
         if len(candidates) < 5:
-            print(f"🔎 HUNT: Running YFinance Fallback on {len(self.fallback_core)} tickers...")
+            print(f"🔎 HUNT [DEBUG]: Triggering Fallback (Candidates: {len(candidates)}). Scanning {len(self.fallback_core)} core tickers...")
             fallback_candidates = self._run_yfinance_scan(self.fallback_core)
             candidates.extend(fallback_candidates)
             
-        print(f"✅ HUNT: Complete. Returning {len(candidates)} targets.")
-        return list(set(candidates))
+        final_list = list(set(candidates))
+        print(f"✅ HUNT [DEBUG]: Hunt Complete. Returning {len(final_list)} unique targets.")
+        return final_list
 
     def _run_finviz_screener(self) -> List[str]:
         """
         Queries Finviz for 'Top Gainers' with structural filters.
         """
-        foverview = Overview()
-        # Filters: Avg Vol > 1M, Price > $10, SMA50 Up, SMA20 Up
-        # This focuses on established uptrends.
-        filters_dict = {
-            'Average Volume': 'Over 1M',
-            'Price': 'Over $10',
-            '50-Day Simple Moving Average': 'Price above SMA50',
-            '20-Day Simple Moving Average': 'Price above SMA20', 
-        }
-        
-        print("🔎 HUNT: Querying Finviz (Trend + Liquidity)...")
-        foverview.set_filter(filters_dict=filters_dict)
-        # Get top 30
-        df = foverview.screener_view(order='-volume', limit=30)
-        
-        if df.empty:
-            return []
+        try:
+            foverview = Overview()
+            # Filters: Avg Vol > 1M, Price > $10, SMA50 Up, SMA20 Up
+            filters_dict = {
+                'Average Volume': 'Over 1M',
+                'Price': 'Over $10',
+                '50-Day Simple Moving Average': 'Price above SMA50',
+                '20-Day Simple Moving Average': 'Price above SMA20', 
+            }
             
-        symbols = df['Ticker'].tolist()
-        print(f"🔎 HUNT: Finviz found {len(symbols)} tickers.")
-        return symbols
+            foverview.set_filter(filters_dict=filters_dict)
+            # Get top 30
+            df = foverview.screener_view(order='-volume', limit=30)
+            
+            if df.empty:
+                return []
+                
+            return df['Ticker'].tolist()
+        except Exception as e:
+            # Re-raise to let parent handle logging
+            raise e
 
     def _run_yfinance_scan(self, universe: List[str]) -> List[str]:
         """
@@ -86,39 +91,49 @@ class MarketHunter:
         """
         targets = []
         try:
-            # Batch download for speed
-            string_tickers = " ".join(universe)
-            data = yf.download(universe, period="5d", interval="1d", group_by='ticker', progress=False)
+            print(f"🔎 HUNT [DEBUG]: Downloading YFinance data for {len(universe)} symbols...")
+            # Batch download for speed - use threads=False to avoid some hanging issues on Docker
+            data = yf.download(universe, period="5d", interval="1d", group_by='ticker', progress=False, threads=True)
+            print("🔎 HUNT [DEBUG]: Download complete. Processing DataFrames...")
             
             for sym in universe:
                 try:
+                    # Handle multi-level column issues if yfinance returns them
+                    # If download fails for one, it might be missing from 'data' columns
+                    if sym not in data.columns.levels[0] if isinstance(data.columns, pd.MultiIndex) else sym not in data:
+                        continue
+
                     df = data[sym]
-                    if df.empty: continue
+                    if df.empty or len(df) < 2: 
+                        continue
                     
                     last = df.iloc[-1]
                     prev = df.iloc[-2]
                     
-                    # Metrics
-                    change_pct = ((last["Close"] - prev["Close"]) / prev["Close"]) * 100
-                    volume = last["Volume"]
+                    # Safe access to scalar values
+                    close_last = float(last["Close"].iloc[0]) if isinstance(last["Close"], pd.Series) else float(last["Close"])
+                    close_prev = float(prev["Close"].iloc[0]) if isinstance(prev["Close"], pd.Series) else float(prev["Close"])
+                    vol_last = float(last["Volume"].iloc[0]) if isinstance(last["Volume"], pd.Series) else float(last["Volume"])
+                    
                     avg_vol = df["Volume"].mean()
-                    vol_ratio = 0 if avg_vol == 0 else volume / avg_vol
+                    avg_vol = float(avg_vol.iloc[0]) if isinstance(avg_vol, pd.Series) else float(avg_vol)
                     
-                    # CRITERIA:
-                    # 1. Liquidity: Volume > 1M (Approx) or just relative volume > 1.0
-                    # 2. Momentum: Up > 1% today OR Huge Volume (1.5x average)
+                    change_pct = ((close_last - close_prev) / close_prev) * 100
+                    vol_ratio = 0 if avg_vol == 0 else vol_last / avg_vol
                     
-                    if volume > 1_000_000:
+                    # Logic: Big Volume OR Big Move
+                    if vol_last > 1_000_000:
                         if change_pct > 1.5 or vol_ratio > 1.2:
-                            # Basic score to sort by later if needed, but for now just include
                             targets.append(sym)
+                            # print(f"  -> Found {sym}: {change_pct:.1f}% Move, {vol_ratio:.1f}x Vol")
                             
-                except Exception:
+                except Exception as inner_e:
+                    # print(f"  -> Error processing {sym}: {inner_e}")
                     continue
                     
         except Exception as e:
-            print(f"⚠️ HUNT: YFinance Scan Error: {e}")
-            return universe[:10] # Worst case, return top 10 safely
+            print(f"⚠️ HUNT [ERROR]: YFinance Scan Critical Fail: {e}")
+            return universe[:5] # Emergency Valve
             
-        print(f"🔎 HUNT: YFinance found {len(targets)} active movers.")
+        print(f"🔎 HUNT [DEBUG]: YFinance Scanned. Found {len(targets)} active movers.")
         return targets

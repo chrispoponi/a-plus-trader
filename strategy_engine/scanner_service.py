@@ -50,6 +50,7 @@ class ScannerService:
         return list(symbols)
 
     async def run_scan(self) -> Dict[str, List[Candidate]]:
+        print("DEBUG: run_scan() triggered via Scheduler or API. Starting...")
         # Refresh symbol list from automation drops
         target_symbols = self.get_target_symbols()
         print(f"DEBUG: Scanning {len(target_symbols)} symbols (Base + Automation)")
