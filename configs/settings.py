@@ -34,7 +34,7 @@ class Settings:
 
     # Signal
     MIN_WIN_PROBABILITY_ESTIMATE = float(os.getenv("MIN_WIN_PROBABILITY", "65.0"))
-    MIN_SWING_SCORE = 70.0
+    MIN_SWING_SCORE = 10.0 # DEBUG: Was 70.0
     MIN_A_PLUS_SWING_SCORE = 80.0
 
     @classmethod

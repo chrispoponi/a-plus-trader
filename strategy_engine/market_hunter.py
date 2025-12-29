@@ -123,4 +123,9 @@ class MarketHunter:
             
         unique_list = list(set(active_movers))
         print(f"🔎 HUNT: Found {len(unique_list)} active targets.")
-        return unique_list
+        
+        # DEBUG: FORCE RETURN ALL 50 TO TEST SCANNER DATA FLOW
+        print(f"🔎 HUNT (DEBUG): Overriding to return FULL UNIVERSE ({len(self.universe)})")
+        return self.universe
+        
+        # return unique_list
