@@ -94,20 +94,18 @@ class OptionsEngine:
             signal_id=f"{symbol}_OPT_{strategy.replace(' ','_')}"
         )
 
-    def scan(self, symbols: List[str]) -> List[Candidate]:
+    def scan(self, symbols: List[str], market_data: Dict[str, any] = None) -> List[Candidate]:
         candidates = []
+        
+        if not market_data:
+            return []
+            
         for symbol in symbols:
-            # Mock Data
-            if symbol == "SPY":
-                # Force "Choppy" data to test Iron Condor
-                # Close is BETWEEN 20 and 50
-                data = {"close": 445.0, "ema20": 450.0, "sma50": 440.0, "adv": 50000000} 
-                res = self.analyze(symbol, data)
-                if res: candidates.append(res)
-            elif symbol == "NVDA":
-                 # Trend Data
-                 data = {"close": 460.0, "ema20": 458.0, "sma50": 430.0, "adv": 50000000}
-                 res = self.analyze(symbol, data)
-                 if res: candidates.append(res)
+            # Use Real Data
+            data = market_data.get(symbol)
+            if not data: continue
+            
+            res = self.analyze(symbol, data)
+            if res: candidates.append(res)
 
         return candidates

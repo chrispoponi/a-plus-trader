@@ -138,11 +138,40 @@ class ScannerService:
             swing_final.append(cand)
             
         # --- OPTIONS SELECTION ---
+        # PASS REAL MARKET DATA
+        raw_options = self.options_engine.scan(target_symbols, market_data)
         options_final = raw_options[:3] 
 
         # --- DAY SELECTION ---
+        # TODO: Pass market_data to day_engine if refactored
         day_final = raw_day[:3] 
         
+        # [SYSTEM STATUS CARD]
+        # Inject detailed info card at the top of SWING results for Dashboard Visibility
+        try:
+            sample_ticker = "AAPL"
+            sample_price = "N/A"
+            if market_data and sample_ticker in market_data:
+                sample_price = f"${market_data[sample_ticker]['close']}"
+                
+            info_setup = Candidate(
+                section=Section.SWING,
+                symbol="SYSTEM",
+                setup_name=f"SCAN REPORT @ {scan_ts}",
+                direction=Direction.LONG,
+                thesis=f"Source: Alpaca API. Universe: {len(target_symbols)}. Active Data: {len(market_data)}. AAPL Check: {sample_price}",
+                features={},
+                trade_plan=TradePlan(entry=0, stop_loss=0, take_profit=0, risk_percent=0),
+                scores=Scores(overall_rank_score=100.0, win_probability_estimate=100.0, quality_score=100.0, risk_score=0, baseline_win_rate=0, adjustments=0),
+                compliance=Compliance(passed_thresholds=True),
+                signal_id="SYSTEM_INFO"
+            )
+            # Prepend to list
+            swing_final.insert(0, info_setup)
+            
+        except Exception as e:
+            print(f"Error creating Info Card: {e}")
+
         results = {
             Section.SWING.value: swing_final,
             Section.OPTIONS.value: options_final,
