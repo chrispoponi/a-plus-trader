@@ -1,27 +1,22 @@
-import pandas as pd
 from typing import List
-from datetime import datetime
-import yfinance as yf
+from datetime import datetime, timedelta
+import alpaca_trade_api as tradeapi
 from configs.settings import settings
-
-try:
-    from finvizfinance.screener.overview import Overview
-    FINVIZ_AVAILABLE = True
-except ImportError:
-    FINVIZ_AVAILABLE = False
-    print("WARNING: finvizfinance not installed. MarketHunter running in Fallback Mode.")
 
 class MarketHunter:
     """
-    Autonomous Market Scanner (The Hunter).
+    Autonomous Market Scanner (The Hunter) - API MODE.
     
-    1. Primary: Finviz Screener (Top Gainers with Trend/Vol Filters)
-    2. Fallback: YFinance Scan of Top 50 Popular Stocks (Momentum & Volatility)
+    Uses Alpaca Data API to scan the 'Core 50' universe for active movers.
+    Criteria:
+    1. Volume > 1.2x Average (Relative Volume)
+    2. Price Change > 1.5% (Momentum)
+    3. Price > SMA50 (Trend) - *Simplification: Just check if Up today*
     """
     
     def __init__(self):
-        # FAILOVER UNIVERSE (Top 50 Active/Popular)
-        self.fallback_core = [
+        # FAILOVER UNIVERSE (Top 50 Active/Popular + Momentum Candidates)
+        self.universe = [
             "NVDA","TSLA","AAPL","GOOGL","MSFT","META","AMD","PLTR","NFLX",
             "INTC","ORCL","SOFI","AMZN","COST","DIS","JPM","BA","CRM",
             "UBER","MRVL","SQ","ABNB","COIN","MARA","MSTR","Riot",
@@ -29,93 +24,102 @@ class MarketHunter:
             "ZS","LULU","NKE","SBUX","MCD","PEP","KO","WMT","TGT",
             "XOM","CVX","OXY","V","MA","AXP","GS"
         ]
+        
+        # Initialize Alpaca Connection specifically for Data
+        try:
+            self.api = tradeapi.REST(
+                settings.APCA_API_KEY_ID,
+                settings.APCA_API_SECRET_KEY,
+                settings.APCA_API_BASE_URL,
+                api_version='v2'
+            )
+            print("hunter: Alpaca Data Connection Established.")
+        except Exception as e:
+            print(f"hunter: Connection Failed: {e}")
+            self.api = None
 
     def hunt(self) -> List[str]:
         """
-        Main entry point. Returns a list of ~20-30 high-quality tickers.
+        Scans values using Alpaca API efficiently.
         """
-        print("\n🔎 HUNT [DEBUG]: Initiating Autonomous Market Hunt (SAFE MODE)...")
-        # BYPASS EXTERNAL CALLS FOR DEBUGGING
-        # Return fallback core immediately to verify pipeline stability
-        print(f"🔎 HUNT [DEBUG]: Returning {len(self.fallback_core)} core tickers immediately.")
-        # Simulating a small subset to ensure speed
-        return self.fallback_core
+        if not self.api:
+            print("hunter [ERROR]: No API connection. Returning static fallback.")
+            return self.universe[:10] # minimal fallback
 
-    def _run_finviz_screener(self) -> List[str]:
-        """
-        Queries Finviz for 'Top Gainers' with structural filters.
-        """
+        print(f"\n🔎 HUNT: Scanning {len(self.universe)} tickers via Alpaca Data API...")
+        active_movers = []
+        
+        # 1. Fetch Data (Last 5 Days to calculate Avg Vol)
+        # Using bars allows us to see recent history for averages
+        today = datetime.now()
+        start_date = (today - timedelta(days=10)).strftime('%Y-%m-%d')
+        
         try:
-            foverview = Overview()
-            # Filters: Avg Vol > 1M, Price > $10, SMA50 Up, SMA20 Up
-            filters_dict = {
-                'Average Volume': 'Over 1M',
-                'Price': 'Over $10',
-                '50-Day Simple Moving Average': 'Price above SMA50',
-                '20-Day Simple Moving Average': 'Price above SMA20', 
-            }
+            # Chunking to be safe (Alpaca handles list well, but good practice)
+            # Fetch daily bars
+            bars = self.api.get_bars(self.universe, '1Day', start=start_date, limit=10, adjustment='raw').df
             
-            foverview.set_filter(filters_dict=filters_dict)
-            # Get top 30
-            df = foverview.screener_view(order='-volume', limit=30)
-            
-            if df.empty:
-                return []
+            if bars.empty:
+                print("hunter: No data returned from Alpaca.")
+                return self.universe # Return all if data fails so we at least scan something
                 
-            return df['Ticker'].tolist()
-        except Exception as e:
-            # Re-raise to let parent handle logging
-            raise e
-
-    def _run_yfinance_scan(self, universe: List[str]) -> List[str]:
-        """
-        Scans the fallback universe for Momentum + Volume using YFinance.
-        """
-        targets = []
-        try:
-            print(f"🔎 HUNT [DEBUG]: Downloading YFinance data for {len(universe)} symbols...")
-            # Batch download for speed - use threads=False to avoid some hanging issues on Docker
-            data = yf.download(universe, period="5d", interval="1d", group_by='ticker', progress=False, threads=True)
-            print("🔎 HUNT [DEBUG]: Download complete. Processing DataFrames...")
+            # Process each symbol
+            # bars df has MultiIndex (symbol, timestamp) or just timestamp with symbol column?
+            # Alpaca python SDK usually returns a DF with symbol column or index depending on version.
+            # Usually: symbol is a column if not grouped.
             
-            for sym in universe:
+            # Let's pivot or group manually
+            grouped = bars.groupby('symbol')
+            
+            for symbol, data in grouped:
                 try:
-                    # Handle multi-level column issues if yfinance returns them
-                    # If download fails for one, it might be missing from 'data' columns
-                    if sym not in data.columns.levels[0] if isinstance(data.columns, pd.MultiIndex) else sym not in data:
-                        continue
-
-                    df = data[sym]
-                    if df.empty or len(df) < 2: 
-                        continue
+                    if len(data) < 2: continue
                     
-                    last = df.iloc[-1]
-                    prev = df.iloc[-2]
+                    # Sort just in case
+                    data = data.sort_index() 
                     
-                    # Safe access to scalar values
-                    close_last = float(last["Close"].iloc[0]) if isinstance(last["Close"], pd.Series) else float(last["Close"])
-                    close_prev = float(prev["Close"].iloc[0]) if isinstance(prev["Close"], pd.Series) else float(prev["Close"])
-                    vol_last = float(last["Volume"].iloc[0]) if isinstance(last["Volume"], pd.Series) else float(last["Volume"])
+                    last = data.iloc[-1]
+                    prev = data.iloc[-2]
                     
-                    avg_vol = df["Volume"].mean()
-                    avg_vol = float(avg_vol.iloc[0]) if isinstance(avg_vol, pd.Series) else float(avg_vol)
+                    # Metrics
+                    close = last['close']
+                    prev_close = prev['close']
+                    volume = last['volume']
+                    avg_vol = data['volume'].mean()
                     
-                    change_pct = ((close_last - close_prev) / close_prev) * 100
-                    vol_ratio = 0 if avg_vol == 0 else vol_last / avg_vol
+                    change_pct = ((close - prev_close) / prev_close) * 100
+                    vol_ratio = 0 if avg_vol == 0 else volume / avg_vol
                     
-                    # Logic: Big Volume OR Big Move
-                    if vol_last > 1_000_000:
-                        if change_pct > 1.5 or vol_ratio > 1.2:
-                            targets.append(sym)
-                            # print(f"  -> Found {sym}: {change_pct:.1f}% Move, {vol_ratio:.1f}x Vol")
+                    # Criteria
+                    # 1. Momentum: > 1.5% Move
+                    # 2. Volume: > 1.2x Relative Volume
+                    # 3. Liquidity Check: Volume > 500k minimum (most in this list are, but checking)
+                    
+                    msg = f"  -> {symbol}: {change_pct:.1f}% chg, {vol_ratio:.1f}x Vol"
+                    # print(msg) # verbose
+                    
+                    is_hit = False
+                    if volume > 500_000:
+                        if abs(change_pct) > 1.5 or vol_ratio > 1.2:
+                            active_movers.append(symbol)
+                            is_hit = True
                             
-                except Exception as inner_e:
-                    # print(f"  -> Error processing {sym}: {inner_e}")
+                    if is_hit:
+                        print(f"✅ HIT: {symbol} ({change_pct:.1f}%)")
+                        
+                except Exception:
                     continue
                     
         except Exception as e:
-            print(f"⚠️ HUNT [ERROR]: YFinance Scan Critical Fail: {e}")
-            return universe[:5] # Emergency Valve
+            print(f"hunter [ERROR]: Data fetch error: {e}")
+            return self.universe # Fail open to the whole list
             
-        print(f"🔎 HUNT [DEBUG]: YFinance Scanned. Found {len(targets)} active movers.")
-        return targets
+        # If market is dead and no one triggered, fallback to the big tech "Safe List"
+        if len(active_movers) < 3:
+            print("hunter: Market quiet. Adding MAG7 to ensure candidates.")
+            mag7 = ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+            active_movers.extend(mag7)
+            
+        unique_list = list(set(active_movers))
+        print(f"🔎 HUNT: Found {len(unique_list)} active targets.")
+        return unique_list
