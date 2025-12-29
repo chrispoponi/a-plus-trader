@@ -143,6 +143,24 @@ class ScannerService:
             
             # [SYSTEM STATUS CARD]
             try:
+                # 1. CHECK FOR DATA FAILURE
+                if len(market_data) == 0:
+                     failure_card = Candidate(
+                        section=Section.SWING,
+                        symbol="DATA_FAIL",
+                        setup_name="NO DATA RETURNED",
+                        direction=Direction.LONG,
+                        thesis="Alpaca returned 0 records for 50 tickers. Check Logs.",
+                        features={},
+                        trade_plan=TradePlan(entry=0, stop_loss=0, take_profit=0, risk_percent=0),
+                        scores=Scores(overall_rank_score=0, win_probability_estimate=0, quality_score=0, risk_score=0, baseline_win_rate=0, adjustments=0),
+                        compliance=Compliance(passed_thresholds=True),
+                        signal_id="DATA_FAILURE"
+                    )
+                     failure_card.setup.grade_color = "red" 
+                     swing_final.insert(0, failure_card)
+
+                # 2. STATUS CARD
                 sample_ticker = "AAPL"
                 sample_price = "N/A"
                 if market_data and sample_ticker in market_data:
@@ -160,6 +178,9 @@ class ScannerService:
                     compliance=Compliance(passed_thresholds=True),
                     signal_id="SYSTEM_INFO"
                 )
+                info_setup.setup.grade_color = "#4ade80" # Green
+                info_setup.setup.setup_quality = "SYSTEM" # Ensure Frontend renders it
+                
                 swing_final.insert(0, info_setup)
             except Exception as e:
                 print(f"Error creating Info Card: {e}")

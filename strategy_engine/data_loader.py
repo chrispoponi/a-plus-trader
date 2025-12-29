@@ -70,8 +70,9 @@ class DataLoader:
                     else:
                         continue # Unknown format
 
-                    if len(sym_data) < 55:
-                        continue # Not enough data for SMA50
+                    if len(sym_data) < 20: # RELAXED CONSTRAINT (Was 55)
+                        print(f"DEBUG: Dropping {symbol} - Insufficient History ({len(sym_data)} < 20)")
+                        continue 
 
                     processed_data = self._calculate_technicals(sym_data)
                     results[symbol] = processed_data
