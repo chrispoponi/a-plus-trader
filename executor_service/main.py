@@ -82,32 +82,66 @@ def debug_system():
     }
 
 @app.get("/api/debug/data")
-def debug_data():
-    from alpaca_trade_api.rest import REST, TimeFrame
-    from datetime import datetime
-    
-    api = REST(
-        settings.APCA_API_KEY_ID, 
-        settings.APCA_API_SECRET_KEY, 
-        base_url=settings.APCA_API_BASE_URL
-    )
-    
+async def debug_data_connection():
+    """
+    Test connectivity to Alpaca Data API specifically.
+    """
     try:
-        # RAW TEST: IEX
-        start = (datetime.now()).strftime('%Y-%m-%d')
-        bars = api.get_bars("AAPL", TimeFrame.Day, start=start, limit=1, feed='iex').df
+        # Import here to avoid circular dependencies if any
+        from alpaca_trade_api.rest import REST, TimeFrame
+        from configs.settings import settings
+        
+        api = REST(
+            settings.APCA_API_KEY_ID,
+            settings.APCA_API_SECRET_KEY,
+            base_url=settings.APCA_API_BASE_URL
+        )
+        
+        # Try to fetch 1 day of AAPL
+        # Using IEX as per fix
+        bars = api.get_bars("AAPL", TimeFrame.Day, limit=1, feed='iex').df
         
         if bars.empty:
-            return {"status": "SUCCESS", "rows": 0, "msg": "No data for today yet (Market Open?)"}
+            return {"status": "ERROR", "message": "Connection OK, but returned empty DataFrame for AAPL (IEX)."}
+        
+        close_price = bars.iloc[-1]['close'] if not bars.empty else 0
         
         return {
             "status": "SUCCESS", 
             "rows": len(bars), 
-            "latest_price": float(bars.iloc[-1]['close']),
+            "latest_price": float(close_price),
             "feed used": "iex"
         }
     except Exception as e:
-        return {"status": "ERROR", "detail": str(e)}
+        import traceback
+        return {
+            "status": "ERROR", 
+            "message": str(e),
+            "trace": traceback.format_exc()
+        }
+
+@app.get("/api/debug/force_scan")
+async def force_scan_debug():
+    """
+    Directly triggers the scanner and returns the RAW JSON results.
+    Bypasses the Dashboard UI to confirm backend logic.
+    """
+    try:
+        from strategy_engine.scanner_service import scanner
+        print("DEBUG: Force Scan Triggered via API")
+        results = await scanner.run_scan()
+        return {
+            "status": "SUCCESS",
+            "count_swing": len(results.get("SWING", [])),
+            "data": results
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "ERROR", 
+            "message": str(e),
+            "trace": traceback.format_exc()
+        }
 
 @app.on_event("startup")
 def on_startup():
