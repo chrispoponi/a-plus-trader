@@ -57,7 +57,8 @@ class MarketHunter:
         try:
             # Chunking to be safe (Alpaca handles list well, but good practice)
             # Fetch daily bars
-            bars = self.api.get_bars(self.universe, '1Day', start=start_date, limit=10, adjustment='raw').df
+            # Fetch daily bars with IEX feed to support Free Tier
+            bars = self.api.get_bars(self.universe, '1Day', start=start_date, limit=10, adjustment='raw', feed='iex').df
             
             if bars.empty:
                 print("hunter: No data returned from Alpaca.")

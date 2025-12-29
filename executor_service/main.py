@@ -57,6 +57,58 @@ async def receive_signal(signal: WebhookSignal, background_tasks: BackgroundTask
 
 from executor_service.scheduler import start_scheduler
 
+@app.get("/api/debug/system")
+def debug_system():
+    import pkg_resources
+    import os
+    
+    # Check Library Versions
+    libs = ["alpaca-trade-api", "pandas", "numpy", "uvicorn", "fastapi"]
+    versions = {}
+    for lib in libs:
+        try:
+            versions[lib] = pkg_resources.get_distribution(lib).version
+        except:
+            versions[lib] = "NOT_INSTALLED"
+            
+    # Check Env Vars (Masked)
+    return {
+        "env": {
+            "API_KEY_ID": "SET" if settings.APCA_API_KEY_ID else "MISSING",
+            "SECRET_KEY": "SET" if settings.APCA_API_SECRET_KEY else "MISSING",
+            "BASE_URL": settings.APCA_API_BASE_URL
+        },
+        "versions": versions
+    }
+
+@app.get("/api/debug/data")
+def debug_data():
+    from alpaca_trade_api.rest import REST, TimeFrame
+    from datetime import datetime
+    
+    api = REST(
+        settings.APCA_API_KEY_ID, 
+        settings.APCA_API_SECRET_KEY, 
+        base_url=settings.APCA_API_BASE_URL
+    )
+    
+    try:
+        # RAW TEST: IEX
+        start = (datetime.now()).strftime('%Y-%m-%d')
+        bars = api.get_bars("AAPL", TimeFrame.Day, start=start, limit=1, feed='iex').df
+        
+        if bars.empty:
+            return {"status": "SUCCESS", "rows": 0, "msg": "No data for today yet (Market Open?)"}
+        
+        return {
+            "status": "SUCCESS", 
+            "rows": len(bars), 
+            "latest_price": float(bars.iloc[-1]['close']),
+            "feed used": "iex"
+        }
+    except Exception as e:
+        return {"status": "ERROR", "detail": str(e)}
+
 @app.on_event("startup")
 def on_startup():
     start_scheduler()
