@@ -34,30 +34,12 @@ class MarketHunter:
         """
         Main entry point. Returns a list of ~20-30 high-quality tickers.
         """
-        print("\n🔎 HUNT [DEBUG]: Initiating Autonomous Market Hunt...")
-        candidates = []
-        
-        # 1. Primary: Finviz
-        if FINVIZ_AVAILABLE:
-            try:
-                print("🔎 HUNT [DEBUG]: Attempting Finviz Screener...")
-                candidates = self._run_finviz_screener()
-                print(f"🔎 HUNT [DEBUG]: Finviz returned {len(candidates)} candidates.")
-            except Exception as e:
-                print(f"⚠️ HUNT [ERROR]: Finviz Failed ({e}).")
-        else:
-             print("⚠️ HUNT [DEBUG]: Finviz library not available.")
-        
-        # 2. Fallback: YFinance Scan of Core List
-        # If Finviz returned too few (<5) or failed, run the internal scanner
-        if len(candidates) < 5:
-            print(f"🔎 HUNT [DEBUG]: Triggering Fallback (Candidates: {len(candidates)}). Scanning {len(self.fallback_core)} core tickers...")
-            fallback_candidates = self._run_yfinance_scan(self.fallback_core)
-            candidates.extend(fallback_candidates)
-            
-        final_list = list(set(candidates))
-        print(f"✅ HUNT [DEBUG]: Hunt Complete. Returning {len(final_list)} unique targets.")
-        return final_list
+        print("\n🔎 HUNT [DEBUG]: Initiating Autonomous Market Hunt (SAFE MODE)...")
+        # BYPASS EXTERNAL CALLS FOR DEBUGGING
+        # Return fallback core immediately to verify pipeline stability
+        print(f"🔎 HUNT [DEBUG]: Returning {len(self.fallback_core)} core tickers immediately.")
+        # Simulating a small subset to ensure speed
+        return self.fallback_core
 
     def _run_finviz_screener(self) -> List[str]:
         """
