@@ -187,7 +187,7 @@ class ScannerService:
                         compliance=Compliance(passed_thresholds=True),
                         signal_id="DATA_FAILURE"
                     )
-                     failure_card.setup.grade_color = "red" 
+                     # failure_card.setup.grade_color = "red" 
                      swing_final.insert(0, failure_card)
 
                 # 2. STATUS CARD
@@ -208,8 +208,8 @@ class ScannerService:
                     compliance=Compliance(passed_thresholds=True),
                     signal_id="SYSTEM_INFO"
                 )
-                info_setup.setup.grade_color = "#4ade80" # Green
-                info_setup.setup.setup_quality = "SYSTEM" # Ensure Frontend renders it
+                # info_setup.setup.grade_color = "#4ade80" # Green
+                # info_setup.setup.setup_quality = "SYSTEM" # Ensure Frontend renders it
                 
                 swing_final.insert(0, info_setup)
             except Exception as e:
@@ -224,13 +224,13 @@ class ScannerService:
                 for cand in day_final:
                     if cand.symbol not in ["SYSTEM", "ERROR", "DATA_FAIL"]:
                         res = executor.execute_trade(cand)
-                        cand.setup.setup_name += f" [{res}]"
+                        cand.setup_name += f" [{res}]"
                 
                 # Execute Swing Trades
                 for cand in swing_final:
                     if cand.symbol not in ["SYSTEM", "ERROR", "DATA_FAIL"]:
                          res = executor.execute_trade(cand)
-                         cand.setup.setup_name += f" [{res}]"
+                         cand.setup_name += f" [{res}]"
             else:
                  print("ℹ️ Auto-Execution Disabled (Signal only).")
 
