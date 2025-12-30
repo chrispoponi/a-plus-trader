@@ -223,20 +223,45 @@ async def get_alpaca_positions():
         data = []
         for p in raw_positions:
             try:
-                side_val = str(p.side.value) if hasattr(p.side, 'value') else str(p.side)
+                # Super Safe Extraction
+                s = str(p.symbol)
+                q = float(p.qty) if p.qty is not None else 0.0
+                mv = float(p.market_value) if p.market_value is not None else 0.0
+                cb = float(p.cost_basis) if p.cost_basis is not None else 0.0
+                upl = float(p.unrealized_pl) if p.unrealized_pl is not None else 0.0
+                uplpc = float(p.unrealized_plpc) if p.unrealized_plpc is not None else 0.0
+                cp = float(p.current_price) if p.current_price is not None else 0.0
+                
+                # Side
+                side_val = "long"
+                if hasattr(p, 'side'):
+                     if hasattr(p.side, 'value'): side_val = str(p.side.value)
+                     else: side_val = str(p.side)
+
                 data.append({
-                    "symbol": str(p.symbol),
-                    "qty": float(p.qty) if p.qty is not None else 0.0,
+                    "symbol": s,
+                    "qty": q,
                     "side": side_val,
-                    "market_value": float(p.market_value) if p.market_value is not None else 0.0,
-                    "cost_basis": float(p.cost_basis) if p.cost_basis is not None else 0.0,
-                    "unrealized_pl": float(p.unrealized_pl) if p.unrealized_pl is not None else 0.0,
-                    "unrealized_plpc": float(p.unrealized_plpc) if p.unrealized_plpc is not None else 0.0,
-                    "current_price": float(p.current_price) if p.current_price is not None else 0.0
+                    "market_value": mv,
+                    "cost_basis": cb,
+                    "unrealized_pl": upl,
+                    "unrealized_plpc": uplpc,
+                    "current_price": cp
                 })
             except Exception as ser_err:
-                print(f"Error serializing position: {ser_err}")
+                data.append({
+                    "symbol": f"ERR: {str(ser_err)[:10]}",
+                    "qty": 0,
+                    "side": "ERR",
+                    "market_value": 0,
+                    "cost_basis": 0,
+                    "unrealized_pl": 0,
+                    "unrealized_plpc": 0,
+                    "current_price": 0
+                })
                 continue 
+                
+        return data 
                 
         return data
     except Exception as e:
