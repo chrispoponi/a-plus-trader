@@ -16,13 +16,13 @@ class MarketHunter:
     
     def __init__(self):
         # FAILOVER UNIVERSE (Top 50 Active/Popular + Momentum Candidates)
+        # Updated to User's "Trend Hunter" Base Universe (Liquid Large Caps)
         self.universe = [
-            "NVDA","TSLA","AAPL","GOOGL","MSFT","META","AMD","PLTR","NFLX",
-            "INTC","ORCL","SOFI","AMZN","COST","DIS","JPM","BA","CRM",
-            "UBER","MRVL","SQ","ABNB","COIN","MARA","MSTR","Riot",
-            "DKNG","HOOD","PANW","CRWD","SNOW","SHOP","TTD","NET",
-            "ZS","LULU","NKE","SBUX","MCD","PEP","KO","WMT","TGT",
-            "XOM","CVX","OXY","V","MA","AXP","GS"
+            "AAPL","MSFT","NVDA","TSLA","AMZN","META","GOOGL","AMD","NFLX","CRM",
+            "INTC","ORCL","CSCO","JPM","BAC","WFC","XOM","CVX","KO","PEP",
+            "COST","WMT","UNH","LLY","AVGO","PYPL","SHOP","PLTR","T","VZ",
+            "MRNA","ABNB","DIS","BA","NKE","SQ","UBER","MCD","PFE","GE",
+            "TGT","V","MA","GM","F","QCOM","BABA","ADBE","SMCI","AMAT"
         ]
         
         # Initialize Alpaca Connection specifically for Data
@@ -52,62 +52,62 @@ class MarketHunter:
         # 1. Fetch Data (Last 5 Days to calculate Avg Vol)
         # Using bars allows us to see recent history for averages
         today = datetime.now()
-        start_date = (today - timedelta(days=10)).strftime('%Y-%m-%d')
+        start_date = (today - timedelta(days=90)).strftime('%Y-%m-%d') # Need ~60-70 trading days for SMA50
         
         try:
-            # Chunking to be safe (Alpaca handles list well, but good practice)
-            # Fetch daily bars
-            # Fetch daily bars with IEX feed to support Free Tier
-            bars = self.api.get_bars(self.universe, '1Day', start=start_date, limit=10, adjustment='raw', feed='iex').df
+            # Fetch daily bars with sufficient history for SMA50
+            bars = self.api.get_bars(self.universe, '1Day', start=start_date, limit=100, adjustment='raw', feed='iex').df
             
             if bars.empty:
                 print("hunter: No data returned from Alpaca.")
-                return self.universe # Return all if data fails so we at least scan something
+                return self.universe 
                 
-            # Process each symbol
-            # bars df has MultiIndex (symbol, timestamp) or just timestamp with symbol column?
-            # Alpaca python SDK usually returns a DF with symbol column or index depending on version.
-            # Usually: symbol is a column if not grouped.
-            
-            # Let's pivot or group manually
             grouped = bars.groupby('symbol')
             
             for symbol, data in grouped:
                 try:
-                    if len(data) < 2: continue
+                    if len(data) < 55: continue # Need history
                     
                     # Sort just in case
                     data = data.sort_index() 
                     
-                    last = data.iloc[-1]
-                    prev = data.iloc[-2]
+                    # --- TECHNICAL CALC ---
+                    closes = data['close']
+                    volume_series = data['volume']
                     
-                    # Metrics
-                    close = last['close']
-                    prev_close = prev['close']
-                    volume = last['volume']
-                    avg_vol = data['volume'].mean()
+                    sma20 = closes.rolling(window=20).mean().iloc[-1]
+                    sma50 = closes.rolling(window=50).mean().iloc[-1]
                     
-                    change_pct = ((close - prev_close) / prev_close) * 100
-                    vol_ratio = 0 if avg_vol == 0 else volume / avg_vol
+                    # RSI Calculation (14)
+                    delta = closes.diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rs = gain / loss
+                    rsi = 100 - (100 / (1 + rs)).iloc[-1]
                     
-                    # Criteria
-                    # 1. Momentum: > 1.5% Move
-                    # 2. Volume: > 1.2x Relative Volume
-                    # 3. Liquidity Check: Volume > 500k minimum (most in this list are, but checking)
+                    last_close = closes.iloc[-1]
+                    last_vol = volume_series.iloc[-1]
                     
-                    msg = f"  -> {symbol}: {change_pct:.1f}% chg, {vol_ratio:.1f}x Vol"
-                    # print(msg) # verbose
+                    # --- FILTERS ---
+                    # 1. Volume > 2M (Liquidity)
+                    if last_vol < 2_000_000: continue
                     
-                    is_hit = False
-                    if volume > 500_000:
-                        if abs(change_pct) > 1.5 or vol_ratio > 1.2:
-                            active_movers.append(symbol)
-                            is_hit = True
-                            
-                    if is_hit:
-                        print(f"✅ HIT: {symbol} ({change_pct:.1f}%)")
+                    # 2. Trend: SMA20 > SMA50 (Bullish Alignment) AND Price > SMA50 (Trend Intact)
+                    if not (sma20 > sma50 and last_close > sma50): continue
+                    
+                    # 3. RSI: 10 - 45 (Deep Pullback / Oversold)
+                    if not (10 <= rsi <= 45): continue
+
+                    print(f"✅ HUNT HIT: {symbol} (RSI: {rsi:.1f}, Vol: {last_vol/1M:.1f}M)")
+                    active_movers.append(symbol)
                         
+                    except Exception:
+                       continue
+                       
+                    # DEBUG INTEGRITY CHECK (Print valid metrics for first symbol)
+                    if symbol == self.universe[0]:
+                        print(f"DEBUG: {symbol} Metrics -> Vol: {last_vol}, SMA20: {sma20:.2f}, SMA50: {sma50:.2f}, RSI: {rsi:.2f}")
+
                 except Exception:
                     continue
                     
