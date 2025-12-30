@@ -9,7 +9,7 @@ from strategy_engine.options_strategy import OptionsEngine
 from strategy_engine.day_trade_strategy import DayTradeEngine
 from scoring.ranker import ranker
 from configs.settings import settings
-from strategy_engine.models import Candidate, Section, TradePlan, Direction
+from strategy_engine.models import Candidate, Section, TradePlan, Direction, Scores, Compliance
 from utils.market_clock import MarketClock
 from configs.trading_rules import TradingRules
 from scoring.llm_analysis import llm_analyzer

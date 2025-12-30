@@ -37,6 +37,9 @@ class SwingAnalysis:
         # Win Prob estimate is correlated to score
         # Cap quality score at 100 for Pydantic
         quality_score_capped = min(total_score, 100.0)
+        
+        # Estimate Win Prob
+        win_prob = 50.0 + (min(total_score, 100.0) * 0.4)
 
         return Scores(
             win_probability_estimate=min(win_prob, 95.0),
