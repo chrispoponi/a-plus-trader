@@ -201,20 +201,27 @@ async def get_alpaca_positions():
             return []
         
         raw_positions = executor.api.get_all_positions()
-        # Serialize simply
         data = []
         for p in raw_positions:
-            # v2 SDK objects have automatic dict conversion usually, but let's be safe
-            data.append({
-                "symbol": p.symbol,
-                "qty": float(p.qty),
-                "side": p.side, # long/short
-                "market_value": float(p.market_value),
-                "cost_basis": float(p.cost_basis),
-                "unrealized_pl": float(p.unrealized_pl),
-                "unrealized_plpc": float(p.unrealized_plpc),
-                "current_price": float(p.current_price)
-            })
+            # Safe Serialization
+            try:
+                # Handle Enum for side (Long/Short)
+                side_val = str(p.side.value) if hasattr(p.side, 'value') else str(p.side)
+                
+                data.append({
+                    "symbol": str(p.symbol),
+                    "qty": float(p.qty) if p.qty is not None else 0.0,
+                    "side": side_val,
+                    "market_value": float(p.market_value) if p.market_value is not None else 0.0,
+                    "cost_basis": float(p.cost_basis) if p.cost_basis is not None else 0.0,
+                    "unrealized_pl": float(p.unrealized_pl) if p.unrealized_pl is not None else 0.0,
+                    "unrealized_plpc": float(p.unrealized_plpc) if p.unrealized_plpc is not None else 0.0,
+                    "current_price": float(p.current_price) if p.current_price is not None else 0.0
+                })
+            except Exception as ser_err:
+                print(f"Error serializing position {p.symbol}: {ser_err}")
+                continue # Skip bad position but return the rest
+                
         return data
     except Exception as e:
         print(f"Error fetching positions: {e}")
