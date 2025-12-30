@@ -239,6 +239,9 @@ class ScannerService:
             import pandas as pd
             
             def sanitize_value(v):
+                # DataFrames/Series trigger bool ambiguity checks if passed to pd.isna() or bool() directly logic
+                if isinstance(v, (pd.DataFrame, pd.Series, list, dict)): 
+                    return None # Do not export complex structures in features
                 if pd.isna(v): return None
                 if isinstance(v, (np.int64, np.int32)): return int(v)
                 if isinstance(v, (np.float64, np.float32)): return float(v)
@@ -248,9 +251,11 @@ class ScannerService:
                 for c in cand_list:
                     # Sanitize Features
                     if c.features:
-                        c.features = {k: sanitize_value(v) for k, v in c.features.items()}
-                    # Sanitize Scores (If needed, Pydantic usually handles this but safety first)
-                    # c.scores... floats are usually fine unless NaN
+                        # We must create a new dict to avoid mutation issues or just overwrite
+                        clean_features = {}
+                        for k, v in c.features.items():
+                             clean_features[k] = sanitize_value(v)
+                        c.features = clean_features
                     pass
 
             results = {
