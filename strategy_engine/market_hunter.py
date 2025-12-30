@@ -98,7 +98,7 @@ class MarketHunter:
                     # 3. RSI: 10 - 45 (Deep Pullback / Oversold)
                     if not (10 <= rsi <= 45): continue
 
-                    print(f"✅ HUNT HIT: {symbol} (RSI: {rsi:.1f}, Vol: {last_vol/1M:.1f}M)")
+                    print(f"✅ HUNT HIT: {symbol} (RSI: {rsi:.1f}, Vol: {last_vol/1_000_000:.1f}M)")
                     active_movers.append(symbol)
                         
                     except Exception:
