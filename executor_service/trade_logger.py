@@ -166,4 +166,14 @@ class TradeLogger:
         
         return summary
 
+    def get_trade_history(self) -> list:
+        """
+        Returns the raw list of trades for the frontend table.
+        """
+        if not os.path.exists(JOURNAL_FILE): return []
+        df = pd.read_csv(JOURNAL_FILE)
+        # Replace NaN with None for JSON compliance
+        df = df.where(pd.notnull(df), None)
+        return df.to_dict(orient="records")
+
 trade_logger = TradeLogger()

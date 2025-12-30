@@ -5,34 +5,43 @@ import numpy as np
 import pytz
 # New SDK
 from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockMostActivesRequest, StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+try:
+    # ScreenerClient is needed for 'Most Actives'
+    from alpaca.data import ScreenerClient
+    from alpaca.data.requests import MostActivesRequest, StockBarsRequest
+except ImportError:
+    print("hunter [WARNING]: ScreenerClient/Requests not found. Using Fallback.")
+    ScreenerClient = None
+    MostActivesRequest = None
+    StockBarsRequest = None
+
 from configs.settings import settings
 
 class MarketHunter:
     """
     Autonomous Market Scanner (The Hunter) - Dynamic Mode.
     
-    Uses Alpaca 'Most Actives' to pull the top 100 volume leaders,
-    then filters and ranks them into two buckets:
-    1. Day Trade (Liquidity + Momentum + ATR)
-    2. Swing Trade (Trend + Liquidity + ROC)
-    
-    Returns exactly 50 symbols.
+    Uses Alpaca 'Most Actives' (ScreenerClient) to pull top volume leaders.
     """
     
     def __init__(self):
         try:
-            self.client = StockHistoricalDataClient(
+            self.history_client = StockHistoricalDataClient(
                 settings.APCA_API_KEY_ID,
                 settings.APCA_API_SECRET_KEY
             )
-            print("hunter: Alpaca Data Client (v2) Established.")
+            self.screener_client = ScreenerClient(
+                settings.APCA_API_KEY_ID,
+                settings.APCA_API_SECRET_KEY
+            )
+            print("hunter: Alpaca Clients (History + Screener) Established.")
         except Exception as e:
             print(f"hunter: Connection Failed: {e}")
-            self.client = None
+            self.history_client = None
+            self.screener_client = None
             
-        # Fallback list just in case Mainnet Screener fails (e.g. on Paper/Mock)
+        # Fallback list... (kept same)
         self.fallback_universe = [
             "NVDA","TSLA","AAPL","AMD","AMZN","META","GOOGL","MSFT","NFLX","COIN",
             "MARA","PLTR","DKNG","ROKU","SHOP","SQ","UBER","BA","DIS","PYPL",
@@ -45,19 +54,17 @@ class MarketHunter:
         """
         Executes the 'Most Actives' scan and bucket logic.
         """
-        if not self.client:
-            print("hunter [ERROR]: No Client. Returning Fallback.")
+        if not self.screener_client or not MostActivesRequest:
+            print("hunter [ERROR]: No Screener Client. Returning Fallback.")
             return self.fallback_universe
 
-        print(f"\n🔎 HUNT: Scanning 'Most Actives' via Alpaca...")
+        print(f"\n🔎 HUNT: Scanning 'Most Actives' via Alpaca Screener...")
         
         try:
             # 1. Pull most active stocks (volume)
-            # Note: This endpoint might require a funded/live key for full data?
-            # On Paper/Free tier it might be limited. We try.
-            actives = self.client.get_stock_most_actives(
-                StockMostActivesRequest(by="volume", top=100)
-            )
+            # Use MostActivesRequest (generic) not StockMostActivesRequest
+            req = MostActivesRequest(by="volume", top=100)
+            actives = self.screener_client.get_most_actives(req)
             
             raw_symbols = [a.symbol for a in actives]
             print(f"hunter: Retrieved {len(raw_symbols)} active symbols.")
@@ -71,7 +78,7 @@ class MarketHunter:
             start = end - timedelta(days=60)
             
             # Batch fetch
-            bars = self.client.get_stock_bars(
+            bars = self.history_client.get_stock_bars(
                 StockBarsRequest(
                     symbol_or_symbols=raw_symbols,
                     timeframe=TimeFrame.Day,

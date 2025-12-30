@@ -149,6 +149,12 @@ async def journal_stats():
     from executor_service.trade_logger import trade_logger
     return trade_logger.generate_analytics()
 
+@app.get("/api/journal/history")
+async def journal_history():
+    """Returns list of all trades (Open and Closed)."""
+    from executor_service.trade_logger import trade_logger
+    return trade_logger.get_trade_history()
+
 @app.post("/api/journal/update")
 async def update_journal(background_tasks: BackgroundTasks):
     """Triggers reconciliation of closed trades."""

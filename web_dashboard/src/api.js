@@ -40,5 +40,21 @@ export const api = {
             console.error(`Upload to ${endpoint} Failed`, error);
             throw error;
         }
+    },
+    getJournalStats: async () => {
+        try {
+            const res = await axios.get(`${API_BASE_URL}/api/journal/stats`);
+            return res.data;
+        } catch (error) {
+            return {};
+        }
+    },
+    getJournalHistory: async () => {
+        try {
+            const res = await axios.get(`${API_BASE_URL}/api/journal/history`);
+            return res.data;
+        } catch (error) {
+            return [];
+        }
     }
 };
