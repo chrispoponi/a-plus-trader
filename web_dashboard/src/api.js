@@ -72,6 +72,15 @@ export const api = {
             throw error;
         }
     },
+    getPositions: async () => {
+        try {
+            const res = await axiosInstance.get(`/api/alpaca/positions`);
+            return res.data;
+        } catch (error) {
+            console.error("Fetch Positions Failed", error);
+            return [];
+        }
+    },
     liquidateAll: async () => {
         try {
             const res = await axiosInstance.post(`/api/emergency/liquidate`);

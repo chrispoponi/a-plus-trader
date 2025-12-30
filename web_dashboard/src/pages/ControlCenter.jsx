@@ -7,6 +7,7 @@ const ControlCenter = () => {
     const [status, setStatus] = useState(null);
     const [stats, setStats] = useState(null);
     const [history, setHistory] = useState([]);
+    const [positions, setPositions] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -17,10 +18,12 @@ const ControlCenter = () => {
         const health = await api.getHealth();
         const jStats = await api.getJournalStats();
         const jHist = await api.getJournalHistory();
+        const pos = await api.getPositions();
 
         setStatus(health);
         setStats(jStats);
         setHistory(jHist);
+        setPositions(pos);
         setLoading(false);
     };
 
@@ -69,6 +72,55 @@ const ControlCenter = () => {
 
             {/* Equity Curve Chart */}
             <PerformanceChart trades={history} />
+
+            {/* LIVE PORTFOLIO */}
+            <div className="bg-pro-card rounded-xl border border-gray-700 overflow-hidden">
+                <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-blue-400" />
+                        Active Portfolio (Live)
+                    </h2>
+                    <span className="text-sm text-gray-400">{positions.length} Open Positions</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-800/50 text-gray-400 uppercase text-xs">
+                            <tr>
+                                <th className="px-6 py-3">Symbol</th>
+                                <th className="px-6 py-3">Qty</th>
+                                <th className="px-6 py-3">Mkt Value</th>
+                                <th className="px-6 py-3 text-right">Cost Basis</th>
+                                <th className="px-6 py-3 text-right">Unrealized P&L</th>
+                                <th className="px-6 py-3 text-right">% Return</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                            {positions.length > 0 ? (
+                                positions.map((p) => (
+                                    <tr key={p.symbol} className="hover:bg-gray-700/30 transition-colors">
+                                        <td className="px-6 py-4 font-bold text-white">{p.symbol}</td>
+                                        <td className={`px-6 py-4 font-mono ${p.qty < 0 ? 'text-purple-400' : 'text-blue-400'}`}>
+                                            {p.qty}
+                                        </td>
+                                        <td className="px-6 py-4 font-mono">${p.market_value?.toFixed(2)}</td>
+                                        <td className="px-6 py-4 font-mono text-right text-gray-400">${p.cost_basis?.toFixed(2)}</td>
+                                        <td className={`px-6 py-4 font-bold text-right ${p.unrealized_pl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            ${p.unrealized_pl?.toFixed(2)}
+                                        </td>
+                                        <td className={`px-6 py-4 font-bold text-right ${p.unrealized_plpc >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {(p.unrealized_plpc * 100).toFixed(2)}%
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500 italic">No active positions found.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
             {/* Performance Log */}
             <div className="bg-pro-card rounded-xl border border-gray-700 overflow-hidden">

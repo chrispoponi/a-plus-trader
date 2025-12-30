@@ -192,6 +192,34 @@ async def update_journal(background_tasks: BackgroundTasks):
     background_tasks.add_task(trade_logger.update_closed_trades)
     return {"status": "reconciliation_started"}
 
+@app.get("/api/alpaca/positions")
+async def get_alpaca_positions():
+    """Fetches LIVE positions directly from Alpaca."""
+    try:
+        from executor_service.order_executor import executor
+        if not executor.api:
+            return []
+        
+        raw_positions = executor.api.get_all_positions()
+        # Serialize simply
+        data = []
+        for p in raw_positions:
+            # v2 SDK objects have automatic dict conversion usually, but let's be safe
+            data.append({
+                "symbol": p.symbol,
+                "qty": float(p.qty),
+                "side": p.side, # long/short
+                "market_value": float(p.market_value),
+                "cost_basis": float(p.cost_basis),
+                "unrealized_pl": float(p.unrealized_pl),
+                "unrealized_plpc": float(p.unrealized_plpc),
+                "current_price": float(p.current_price)
+            })
+        return data
+    except Exception as e:
+        print(f"Error fetching positions: {e}")
+        return []
+
 @app.on_event("startup")
 def on_startup():
     start_scheduler()
