@@ -1,133 +1,160 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Server, Database, Activity, FileText } from 'lucide-react';
-import BotControls from '../components/BotControls';
+import { Play, Activity, TrendingUp, ShieldCheck } from 'lucide-react';
+import PerformanceChart from '../components/PerformanceChart';
 
 const ControlCenter = () => {
-    const [uploads, setUploads] = useState({});
-    const [health, setHealth] = useState({ status: 'checking' });
+    const [status, setStatus] = useState(null);
+    const [stats, setStats] = useState(null);
+    const [history, setHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchData = async () => {
-            const h = await api.getHealth();
-            setHealth(h);
-            const files = await api.getUploads();
-            setUploads(files);
-        };
-        fetchData();
-        const interval = setInterval(fetchData, 10000); // Refresh every 10s
-        return () => clearInterval(interval);
+        loadData();
     }, []);
 
-    const StatusBadge = ({ label, value, active }) => (
-        <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
-            <span className="text-gray-400 text-sm">{label}</span>
-            <span className={`text-sm font-bold ${active ? 'text-pro-success' : 'text-gray-500'}`}>
-                {value}
-            </span>
-        </div>
-    );
+    const loadData = async () => {
+        const health = await api.getHealth();
+        const jStats = await api.getJournalStats();
+        const jHist = await api.getJournalHistory();
+
+        setStatus(health);
+        setStats(jStats);
+        setHistory(jHist);
+        setLoading(false);
+    };
 
     return (
-        <div className="p-6 space-y-6">
-            <header>
-                <h1 className="text-3xl font-bold text-white">Command Center</h1>
-                <p className="text-gray-400">System Visibility & Controls</p>
-            </header>
+        <div className="p-6 space-y-8">
+            <h1 className="text-3xl font-bold text-white">MISSION CONTROL - LIVE VERIFIED</h1>
 
-            {/* TOP ROW: HEALTH & DATA */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* COLUMN 1: SYSTEM HEALTH */}
-                <div className="space-y-6">
-                    <div className="bg-pro-card p-5 rounded-xl border border-gray-700 h-full">
-                        <div className="flex items-center gap-2 mb-4 text-white font-semibold">
-                            <Server className="w-5 h-5 text-pro-accent" />
-                            <h3>Core System</h3>
-                        </div>
-                        <div className="space-y-3">
-                            <StatusBadge
-                                label="Engine Status"
-                                value={health.status === 'system_active' ? 'ONLINE' : 'OFFLINE'}
-                                active={health.status === 'system_active'}
-                            />
-                            <StatusBadge
-                                label="Trading Mode"
-                                value={health.mode || 'N/A'}
-                                active={health.mode === 'LIVE' || health.mode === 'PAPER'}
-                            />
-                            <StatusBadge
-                                label="Risk Limit"
-                                value={`${health.risk_limit ? (health.risk_limit * 100).toFixed(2) : '-'}%`}
-                                active={true}
-                            />
-                        </div>
+            {/* Status Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-gray-400 text-sm font-medium">SYSTEM STATUS</h3>
+                        <Activity className={`w-5 h-5 ${status?.status === 'system_active' ? 'text-pro-success' : 'text-pro-danger'}`} />
                     </div>
+                    <p className="text-2xl font-bold capitalize">{status?.status?.replace('_', ' ') || 'Offline'}</p>
                 </div>
 
-                {/* COLUMN 2 & 3: DATA INVENTORY */}
-                <div className="bg-pro-card p-5 rounded-xl border border-gray-700 lg:col-span-2">
-                    <div className="flex items-center gap-2 mb-6 text-white font-semibold">
-                        <Database className="w-5 h-5 text-pro-warning" />
-                        <h3>Data Inventory</h3>
+                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-gray-400 text-sm font-medium">MODE</h3>
+                        <ShieldCheck className="w-5 h-5 text-pro-warning" />
                     </div>
+                    <p className="text-2xl font-bold tracking-wider">{status?.mode || '---'}</p>
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {['chatgpt', 'tradingview', 'finviz'].map((source) => (
-                            <div key={source} className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
-                                <h4 className="text-sm font-bold text-gray-300 uppercase mb-3 flex items-center justify-between">
-                                    {source}
-                                    <span className="text-xs bg-gray-700 px-2 py-0.5 rounded text-white">{uploads[source]?.length || 0}</span>
-                                </h4>
-                                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                                    {uploads[source] && uploads[source].length > 0 ? (
-                                        uploads[source].map((file, i) => (
-                                            <div key={i} className="flex items-center gap-2 text-xs text-gray-400">
-                                                <FileText className="w-3 h-3 flex-shrink-0" />
-                                                <span className="truncate">{file}</span>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-xs text-gray-600 italic">No files uploaded</div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-gray-400 text-sm font-medium">WIN RATE</h3>
+                        <TrendingUp className="w-5 h-5 text-pro-accent" />
                     </div>
+                    <p className="text-2xl font-bold text-white">
+                        {stats?.win_rate ? (stats.win_rate * 100).toFixed(1) + '%' : 'N/A'}
+                    </p>
+                </div>
 
-                    <div className="mt-6 bg-gray-800/50 p-4 rounded-lg border border-gray-700">
-                        <h4 className="text-sm font-bold text-gray-300 uppercase mb-3 flex items-center justify-between">
-                            ChatGPT Automation Drops
-                            <span className="text-xs bg-gray-700 px-2 py-0.5 rounded text-white">{uploads['chatgpt_automation']?.length || 0}</span>
-                        </h4>
-                        <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                            {uploads['chatgpt_automation'] && uploads['chatgpt_automation'].length > 0 ? (
-                                uploads['chatgpt_automation'].map((file, i) => (
-                                    <div key={i} className="flex items-center gap-2 text-xs text-gray-400">
-                                        <Activity className="w-3 h-3 text-green-500 flex-shrink-0" />
-                                        <span className="truncate">{file}</span>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-xs text-gray-600 italic">No automation drops received yet</div>
-                            )}
-                        </div>
+                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-gray-400 text-sm font-medium">NET PnL</h3>
+                        <span className="text-xs text-gray-500">REALIZED</span>
                     </div>
+                    <p className={`text-2xl font-bold ${stats?.total_pnl >= 0 ? 'text-pro-success' : 'text-pro-danger'}`}>
+                        {stats?.total_pnl ? `$${stats.total_pnl.toFixed(2)}` : '$0.00'}
+                    </p>
                 </div>
             </div>
 
+            {/* Equity Curve Chart */}
+            <PerformanceChart trades={history} />
 
+            {/* Performance Log */}
+            <div className="bg-pro-card rounded-xl border border-gray-700 overflow-hidden">
+                <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-white">Recent Trade Log</h2>
+                    <span className="text-sm text-gray-400">{history.length} Entries</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-800/50 text-gray-400 uppercase text-xs">
+                            <tr>
+                                <th className="px-6 py-3">Time</th>
+                                <th className="px-6 py-3">Symbol</th>
+                                <th className="px-6 py-3">Type</th>
+                                <th className="px-6 py-3">Entry</th>
+                                <th className="px-6 py-3">Exit</th>
+                                <th className="px-6 py-3 text-right">PnL</th>
+                                <th className="px-6 py-3 text-right">R-Mult</th>
+                                <th className="px-6 py-3 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                            {history.length > 0 ? (
+                                history.slice().reverse().map((t) => (
+                                    <tr key={t.trade_id} className="hover:bg-gray-700/30 transition-colors">
+                                        <td className="px-6 py-4 font-mono text-gray-400">{new Date(t.entry_time).toLocaleTimeString()}</td>
+                                        <td className="px-6 py-4 font-bold text-white">{t.symbol}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded text-xs font-bold ${t.bucket === 'DAY_TRADE' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                                {t.bucket}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 font-mono">${t.entry_price?.toFixed(2)}</td>
+                                        <td className="px-6 py-4 font-mono">{t.exit_price ? `$${t.exit_price.toFixed(2)}` : '-'}</td>
+                                        <td className={`px-6 py-4 text-right font-bold ${t.pnl_dollars > 0 ? 'text-green-400' : t.pnl_dollars < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                                            {t.pnl_dollars ? `$${t.pnl_dollars.toFixed(2)}` : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-mono">{t.r_multiple ? `${t.r_multiple.toFixed(2)}R` : '-'}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`px-2 py-1 rounded text-xs ${t.status === 'CLOSED' ? 'bg-gray-700 text-gray-300' : 'bg-green-500/20 text-green-400 animate-pulse'}`}>
+                                                {t.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="8" className="px-6 py-8 text-center text-gray-500 italic">No trades recorded locally.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-            {/* BOTTOM ROW: BOT INTERFACE (FULL WIDTH) */}
-            <div className="bg-pro-card p-5 rounded-xl border border-gray-700 min-h-[400px]">
-                <BotControls onRefresh={() => {
-                    // Trigger a refresh of the upload list
-                    const fetchData = async () => {
-                        const files = await api.getUploads();
-                        setUploads(files);
-                    };
-                    fetchData();
-                }} />
+            {/* Quick Actions */}
+            <div className="flex gap-4 items-center">
+                <a href="/scan" className="flex items-center gap-2 bg-pro-accent hover:bg-blue-600 transition-colors px-6 py-3 rounded-lg font-semibold shadow-lg shadow-blue-900/20 text-white">
+                    <Play className="w-4 h-4" />
+                    Launch Scanner
+                </a>
+
+                <button
+                    onClick={async () => {
+                        if (confirm("Clear all data files?")) {
+                            await api.clearData();
+                            location.reload();
+                        }
+                    }}
+                    className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 transition-colors px-6 py-3 rounded-lg font-bold shadow-lg text-white border border-gray-600"
+                >
+                    CLEAR DATA
+                </button>
+
+                <button
+                    onClick={async () => {
+                        if (confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will immediately MARKET SELL all open positions and CANCEL all orders.\n\nAre you sure you want to go to 100% CASH?")) {
+                            await api.liquidateAll();
+                            alert("Liquidation Signal Sent. Check Alpaca.");
+                        }
+                    }}
+                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 transition-colors px-6 py-3 rounded-lg font-bold shadow-lg shadow-red-900/20 text-white border border-red-500"
+                >
+                    <div className="w-3 h-3 bg-white rounded-full animate-pulse mr-1" />
+                    LIQUIDATE ALL POSITIONS
+                </button>
             </div>
         </div>
     );
