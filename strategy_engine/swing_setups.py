@@ -35,11 +35,12 @@ class SwingAnalysis:
         total_score = trend_score + structure_score + vol_score + sector_score + supply_score + event_score
         
         # Win Prob estimate is correlated to score
-        win_prob = 50 + (total_score * 0.3) 
-        
+        # Cap quality score at 100 for Pydantic
+        quality_score_capped = min(total_score, 100.0)
+
         return Scores(
             win_probability_estimate=min(win_prob, 95.0),
-            quality_score=total_score,
+            quality_score=quality_score_capped,
             risk_score=event_score, 
             overall_rank_score=min(total_score, 99.0), # Cap at 99
             baseline_win_rate=55.0,

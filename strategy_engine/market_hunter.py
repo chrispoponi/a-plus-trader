@@ -66,7 +66,19 @@ class MarketHunter:
             req = MostActivesRequest(by="volume", top=100)
             actives = self.screener_client.get_most_actives(req)
             
-            raw_symbols = [a.symbol for a in actives]
+            # Safe Symbol Extraction (Handle Object, Dict, or Tuple)
+            raw_symbols = []
+            for a in actives:
+                if hasattr(a, 'symbol'): 
+                    raw_symbols.append(a.symbol)
+                elif isinstance(a, dict):
+                    raw_symbols.append(a.get('symbol'))
+                elif isinstance(a, tuple):
+                    # Likely (symbol, vol)
+                    raw_symbols.append(a[0])
+                else:
+                    print(f"hunter [WARN]: Unknown Active Format: {type(a)}")
+
             print(f"hunter: Retrieved {len(raw_symbols)} active symbols.")
             
             if not raw_symbols:
