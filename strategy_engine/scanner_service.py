@@ -159,7 +159,7 @@ class ScannerService:
                     c.thesis += f" | NOTE: {news['latest_headline']}"
                     
                     if news['sentiment'] == 'NEGATIVE':
-                         c.setup.setup_name = "⚠️ NEWS RISK " + c.setup.setup_name
+                         c.setup_name = "⚠️ NEWS RISK " + c.setup_name
                          
             enrich_with_news(swing_final)
             enrich_with_news(day_final)

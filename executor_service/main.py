@@ -172,6 +172,19 @@ async def emergency_liquidate():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.post("/api/data/clear")
+async def clear_data():
+    """
+    Clears all CSV files from uploads directory.
+    """
+    try:
+        files = glob.glob(os.path.join("uploads", "*.csv"))
+        for f in files:
+            os.remove(f)
+        return {"status": "success", "message": f"Cleared {len(files)} files."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.post("/api/journal/update")
 async def update_journal(background_tasks: BackgroundTasks):
     """Triggers reconciliation of closed trades."""

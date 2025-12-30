@@ -63,6 +63,15 @@ export const api = {
             return [];
         }
     },
+    clearData: async () => {
+        try {
+            const res = await axiosInstance.post(`/api/data/clear`);
+            return res.data;
+        } catch (error) {
+            console.error("Clear Data Failed", error);
+            throw error;
+        }
+    },
     liquidateAll: async () => {
         try {
             const res = await axiosInstance.post(`/api/emergency/liquidate`);

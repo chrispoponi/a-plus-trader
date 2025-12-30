@@ -133,6 +133,18 @@ const Dashboard = () => {
 
                 <button
                     onClick={async () => {
+                        if (confirm("Clear all data files?")) {
+                            await api.clearData();
+                            location.reload();
+                        }
+                    }}
+                    className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 transition-colors px-6 py-3 rounded-lg font-bold shadow-lg text-white border border-gray-600"
+                >
+                    CLEAR DATA
+                </button>
+
+                <button
+                    onClick={async () => {
                         if (confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will immediately MARKET SELL all open positions and CANCEL all orders.\n\nAre you sure you want to go to 100% CASH?")) {
                             await api.liquidateAll();
                             alert("Liquidation Signal Sent. Check Alpaca.");
