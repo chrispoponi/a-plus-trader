@@ -234,6 +234,25 @@ class ScannerService:
             else:
                  print("ℹ️ Auto-Execution Disabled (Signal only).")
 
+            # --- SANITIZATION (Fix Serialization Errors) ---
+            import numpy as np
+            import pandas as pd
+            
+            def sanitize_value(v):
+                if pd.isna(v): return None
+                if isinstance(v, (np.int64, np.int32)): return int(v)
+                if isinstance(v, (np.float64, np.float32)): return float(v)
+                return v
+
+            for cand_list in [swing_final, options_final, day_final]:
+                for c in cand_list:
+                    # Sanitize Features
+                    if c.features:
+                        c.features = {k: sanitize_value(v) for k, v in c.features.items()}
+                    # Sanitize Scores (If needed, Pydantic usually handles this but safety first)
+                    # c.scores... floats are usually fine unless NaN
+                    pass
+
             results = {
                 Section.SWING.value: swing_final,
                 Section.OPTIONS.value: options_final,
