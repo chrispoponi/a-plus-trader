@@ -56,5 +56,14 @@ export const api = {
         } catch (error) {
             return [];
         }
+    },
+    liquidateAll: async () => {
+        try {
+            const res = await axios.post(`${API_BASE_URL}/api/emergency/liquidate`);
+            return res.data;
+        } catch (error) {
+            console.error("Liquidation Failed", error);
+            throw error;
+        }
     }
 };

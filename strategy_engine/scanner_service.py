@@ -146,9 +146,25 @@ class ScannerService:
 
             # (No need for extra sorting here as Lists are short, but we can verify)
             
-            # Apply Core Logic / AI Check on Swing
+            # Apply Core Logic / AI Check / News Check on Swing
+            from strategy_engine.news_engine import news_engine
+            
+            # Helper to enrich with news
+            def enrich_with_news(c_list):
+                for c in c_list:
+                    if c.symbol in ["SYSTEM", "ERROR", "DATA_FAIL"]: continue
+                    
+                    news = news_engine.get_market_sentiment(c.symbol)
+                    c.thesis += f" | NOTE: {news['latest_headline']}"
+                    
+                    if news['sentiment'] == 'NEGATIVE':
+                         c.setup.setup_name = "⚠️ NEWS RISK " + c.setup.setup_name
+                         
+            enrich_with_news(swing_final)
+            enrich_with_news(day_final)
+
+            # AI Sanity Check (Swing Only)
             for cand in swing_final:
-                 cand.setup.setup_name = f"{cand.setup.setup_name}"
                  cand.scores.overall_rank_score = 99.0 # Elite
                  try:
                      cand.ai_analysis = await llm_analyzer.analyze_candidate(cand)

@@ -121,11 +121,24 @@ const Dashboard = () => {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
                 <a href="/scan" className="flex items-center gap-2 bg-pro-accent hover:bg-blue-600 transition-colors px-6 py-3 rounded-lg font-semibold shadow-lg shadow-blue-900/20 text-white">
                     <Play className="w-4 h-4" />
                     Launch Scanner
                 </a>
+
+                <button
+                    onClick={async () => {
+                        if (confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will immediately MARKET SELL all open positions and CANCEL all orders.\n\nAre you sure you want to go to 100% CASH?")) {
+                            await api.liquidateAll();
+                            alert("Liquidation Signal Sent. Check Alpaca.");
+                        }
+                    }}
+                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 transition-colors px-6 py-3 rounded-lg font-bold shadow-lg shadow-red-900/20 text-white border border-red-500"
+                >
+                    <div className="w-3 h-3 bg-white rounded-full animate-pulse mr-1" />
+                    LIQUIDATE ALL POSITIONS
+                </button>
             </div>
         </div>
     );

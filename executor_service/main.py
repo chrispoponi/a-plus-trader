@@ -155,6 +155,23 @@ async def journal_history():
     from executor_service.trade_logger import trade_logger
     return trade_logger.get_trade_history()
 
+@app.post("/api/emergency/liquidate")
+async def emergency_liquidate():
+    """
+    KILL SWITCH: Liquidates all positions (Market Sell) and Cancels all open orders.
+    """
+    try:
+        from executor_service.order_executor import executor
+        if not executor.api:
+            return {"status": "error", "message": "Alpaca API not connected"}
+        
+        # Alpaca native 'close all'
+        executor.api.close_all_positions(cancel_orders=True)
+        print("🚨 EMERGENCY: LIQUIDATE ALL TRIGGERED")
+        return {"status": "success", "message": "Liquidate All Signal Sent"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.post("/api/journal/update")
 async def update_journal(background_tasks: BackgroundTasks):
     """Triggers reconciliation of closed trades."""
