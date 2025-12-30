@@ -23,10 +23,20 @@ app.include_router(automation_router)
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
+    from executor_service.order_executor import executor
+    
+    conn = "connected" if executor.api else "disconnected"
+    if executor.api:
+        try:
+            executor.api.get_clock()
+        except:
+            conn = "error_connecting"
+            
     return {
         "status": "system_active", 
         "mode": settings.TRADING_MODE, 
-        "risk_limit": settings.MAX_RISK_PER_TRADE_PERCENT
+        "risk_limit": settings.MAX_RISK_PER_TRADE_PERCENT,
+        "alpaca_status": conn
     }
 
 @app.get("/scan")
@@ -198,16 +208,22 @@ async def get_alpaca_positions():
     try:
         from executor_service.order_executor import executor
         if not executor.api:
-            return []
+            return [{
+                "symbol": "API_DISCONNECTED",
+                "qty": 0,
+                "side": "ERR",
+                "market_value": 0,
+                "cost_basis": 0,
+                "unrealized_pl": 0,
+                "unrealized_plpc": 0,
+                "current_price": 0
+            }]
         
         raw_positions = executor.api.get_all_positions()
         data = []
         for p in raw_positions:
-            # Safe Serialization
             try:
-                # Handle Enum for side (Long/Short)
                 side_val = str(p.side.value) if hasattr(p.side, 'value') else str(p.side)
-                
                 data.append({
                     "symbol": str(p.symbol),
                     "qty": float(p.qty) if p.qty is not None else 0.0,
@@ -219,13 +235,22 @@ async def get_alpaca_positions():
                     "current_price": float(p.current_price) if p.current_price is not None else 0.0
                 })
             except Exception as ser_err:
-                print(f"Error serializing position {p.symbol}: {ser_err}")
-                continue # Skip bad position but return the rest
+                print(f"Error serializing position: {ser_err}")
+                continue 
                 
         return data
     except Exception as e:
         print(f"Error fetching positions: {e}")
-        return []
+        return [{
+                "symbol": f"ERROR: {str(e)[:15]}",
+                "qty": 0,
+                "side": "ERR",
+                "market_value": 0,
+                "cost_basis": 0,
+                "unrealized_pl": 0,
+                "unrealized_plpc": 0,
+                "current_price": 0
+            }]
 
 @app.on_event("startup")
 def on_startup():
