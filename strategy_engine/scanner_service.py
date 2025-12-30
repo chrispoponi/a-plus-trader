@@ -158,8 +158,8 @@ class ScannerService:
                     news = news_engine.get_market_sentiment(c.symbol)
                     c.thesis += f" | NOTE: {news['latest_headline']}"
                     
-                    if news['sentiment'] == 'NEGATIVE':
-                         c.setup_name = "⚠️ NEWS RISK " + c.setup_name
+                    # if news['sentiment'] == 'NEGATIVE':
+                    #     c.setup_name = "⚠️ NEWS RISK " + c.setup_name
                          
             enrich_with_news(swing_final)
             enrich_with_news(day_final)
