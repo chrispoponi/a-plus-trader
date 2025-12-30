@@ -28,21 +28,36 @@ class OrderExecutor:
 
     def calculate_position_size(self, candidate: Candidate, account_equity: float = 100000.0) -> int:
         """
-        Calculates number of shares based on Risk Percent vs Stop Loss Distance.
-        Classic Risk Formula: 
-        Risk Amount = Equity * Risk%
-        Shares = Risk Amount / (Entry - Stop)
+        Calculates position size using Aggressive Allocation Model.
+        Shares = Min( Risk_Shares, Cap_Shares )
         """
         plan = candidate.trade_plan
-        if not plan or plan.entry == plan.stop_loss: return 0
-
-        risk_amount = account_equity * (plan.risk_percent / 100.0)
-        risk_per_share = abs(plan.entry - plan.stop_loss)
+        price = plan.entry
+        if price <= 0: return 0
         
-        if risk_per_share <= 0: return 0
+        # 1. Determine Parameters based on Section
+        if candidate.section == "DAY_TRADE":
+            alloc_pct = 0.20 # 20% of Account
+            risk_pct = 0.015 # 1.5% Risk
+        else: # SWING
+            alloc_pct = 0.14 # 14% of Account
+            risk_pct = 0.025 # 2.5% Risk
+            
+        # 2. Risk-Based Sizing (How many shares can I buy without losing > Risk%?)
+        stop_dist = abs(price - plan.stop_loss)
+        if stop_dist <= 0: stop_dist = price * 0.01 # Fallback to prevent divide by zero
         
-        shares = math.floor(risk_amount / risk_per_share)
-        return max(shares, 1) # Minimum 1 share if valid
+        risk_dollars = account_equity * risk_pct
+        shares_risk = math.floor(risk_dollars / stop_dist)
+        
+        # 3. Capital-Cap Sizing (How many shares until I hit Max Allocation?)
+        cap_dollars = account_equity * alloc_pct
+        shares_cap = math.floor(cap_dollars / price)
+        
+        # 4. Final Sizing (Conservative of the two)
+        final_shares = min(shares_risk, shares_cap)
+        
+        return max(final_shares, 1) # Min 1
 
     def check_risk_compliance(self, symbol: str) -> str:
         """
@@ -54,8 +69,9 @@ class OrderExecutor:
         try:
             # 1. Check Max Positions
             positions = self.api.list_positions()
-            if len(positions) >= settings.MAX_OPEN_SWING_POSITIONS:
-                return f"MAX_POSITIONS_REACHED ({len(positions)}/{settings.MAX_OPEN_SWING_POSITIONS})"
+            # Dynamic Cap: Day (3) + Swing (3) = 6
+            if len(positions) >= 6:
+                return f"MAX_POSITIONS_REACHED ({len(positions)}/6)"
             
             # 2. Check Duplicates
             for pos in positions:
@@ -88,8 +104,7 @@ class OrderExecutor:
         side = "buy" if candidate.direction == Direction.LONG else "sell"
         plan = candidate.trade_plan
         
-        # 1. Calculate Size
-        # (Ideally fetch real equity, but fallback to 100k for mock if fails)
+        # 1. Get Equity
         try:
             acct = self.api.get_account()
             equity = float(acct.equity)
@@ -102,23 +117,56 @@ class OrderExecutor:
             print(f"SKIP EXECUTION: {symbol} (Calculated Qty 0)")
             return "QTY_ZERO"
 
-        print(f"EXECUTING {side.upper()} {qty} {symbol} @ {plan.entry} (Risk: ${equity * (plan.risk_percent/100.0):.2f})")
+        print(f"EXECUTING {side.upper()} {qty} {symbol} @ {plan.entry} (Risk: ${equity * 0.015:.2f} - Aggressive)")
 
         # 2. Submit Bracket Order
         try:
-            # We use MARKET for entry to ensure fill in this autonomous bot version
-            # But we attach Take Profit and Stop Loss immediately
+            type_order = 'market'
+            tif = 'day'
+            limit_price = None
             
-            order = self.api.submit_order(
-                symbol=symbol,
-                qty=qty,
-                side=side,
-                type='market',
-                time_in_force='gtc',
-                order_class='bracket',
-                take_profit={'limit_price': plan.take_profit},
-                stop_loss={'stop_price': plan.stop_loss}
-            )
+            # Specific Logic for Day vs Swing
+            if candidate.section == "SWING":
+                type_order = 'limit'
+                tif = 'gtc'
+                limit_price = plan.entry # Use Entry as Limit
+            else:
+                # Day Trade: Market Entry
+                type_order = 'market'
+                tif = 'day'
+            
+            # Construct Args
+            order_args = {
+                "symbol": symbol,
+                "qty": qty,
+                "side": side,
+                "type": type_order,
+                "time_in_force": tif,
+                "order_class": 'bracket',
+                "take_profit": {'limit_price': plan.take_profit},
+                "stop_loss": {'stop_price': plan.stop_loss}
+            }
+            
+            if limit_price:
+                order_args["limit_price"] = limit_price
+            
+            order = self.api.submit_order(**order_args)
+            
+            # --- JOURNAL LOGGING ---
+            try:
+                from executor_service.trade_logger import trade_logger
+                trade_logger.log_trade_entry(
+                    symbol=symbol,
+                    bucket=candidate.section,
+                    qty=qty,
+                    entry_price=plan.entry,
+                    stop=plan.stop_loss,
+                    target=plan.take_profit
+                )
+            except Exception as log_err:
+                print(f"LOGGER FAIL: {log_err}")
+            # -----------------------
+
             print(f"ORDER SUBMITTED: {order.id}")
             return f"SUCCESS_{order.id}"
             

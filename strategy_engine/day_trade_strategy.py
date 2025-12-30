@@ -9,46 +9,71 @@ class DayTradeEngine:
     """
     
     def analyze(self, symbol: str, data: Dict[str, any]) -> Optional[Candidate]:
-        # Filter: RVOL (Mocked)
-        rvol = data.get('rvol', 1.0)
-        if rvol < 1.5: return None # Must have volume
+        # Expecting 'intraday_df' in data for this logic
+        df = data.get('intraday_df')
+        if df is None or len(df) < 50: 
+            return None # Insufficient intraday data
+            
+        # --- LOGIC IMPLEMENTATION (Pandas) ---
+        # 1. Indicators
+        df['vol_avg'] = df['volume'].rolling(20).mean()
+        df['vol_ratio'] = df['volume'] / df['vol_avg']
+        df['ema9'] = df['close'].ewm(span=9).mean()
+        df['ema20'] = df['close'].ewm(span=20).mean()
+        df['high_20'] = df['high'].rolling(20).max().shift(1) # Don't look ahead, use prev 20
+        df['atr'] = (df['high'] - df['low']).rolling(14).mean() # Simplified ATR for speed
+
+        # 2. Get Recent Bar (Last Completed)
+        last = df.iloc[-1]
+        prev = df.iloc[-2]
         
-        # Strategy: VWAP Reclaim
-        # Price crossing above VWAP
-        close = data.get('close')
-        vwap = data.get('vwap')
+        # 3. Buy Signal Conditions (Vol Surge + Bull Cross + Breakout)
+        vol_surge = last['vol_ratio'] > 2.0
+        bull_cross = (last['ema9'] > last['ema20']) and (prev['ema9'] <= prev['ema20']) # Crossover
+        breakout = last['close'] > last['high_20']
         
-        if close > vwap and (close - vwap) / vwap < 0.005: 
-            # Reclaimed/Hold
-            return Candidate(
+        # Combined Signal
+        is_buy = vol_surge and bull_cross and breakout
+        
+        if is_buy:
+             atr_val = last['atr'] if last['atr'] > 0 else last['close'] * 0.005
+             stop_price = last['close'] - (atr_val * 1.5)
+             target_price = last['close'] + (atr_val * 3.0) # 2:1 Reward (1.5 * 2 = 3.0 distance)
+             
+             return Candidate(
                 section=Section.DAY_TRADE,
                 symbol=symbol,
-                setup_name="VWAP Reclaim Momentum",
+                setup_name="Intraday Momentum Surge",
                 direction=Direction.LONG,
-                thesis=f"High RVOL ({rvol}x). Reclaimed VWAP with volume surge.",
-                features=data,
+                thesis=f"Values: VolRatio {last['vol_ratio']:.1f}x. Breakout > {last['high_20']:.2f}. EMA9 Cross.",
+                features={"vol_ratio": float(last['vol_ratio']), "ema9": float(last['ema9'])},
                 trade_plan=TradePlan(
-                    entry=close,
-                    stop_loss=vwap * 0.998, # Tight stop below VWAP
-                    take_profit=close * 1.02, # 2% intraday move
-                    risk_percent=0.25 # Smaller risk for day trades? User said configurable, sticking to logic
+                    entry=last['close'],
+                    stop_loss=round(stop_price, 2),
+                    take_profit=round(target_price, 2),
+                    risk_percent=settings.MAX_RISK_PER_TRADE_PERCENT,
+                    stop_type="Intraday ATR(1.5)"
                 ),
                 scores=Scores(
-                     win_probability_estimate=60.0,
-                     quality_score=90.0,
-                     risk_score=70.0,
-                     overall_rank_score=85.0, # High rank due to A+ criteria
+                     win_probability_estimate=65.0,
+                     quality_score=90.0, # A+ Setup
+                     risk_score=60.0, # Higher risk intraday
+                     overall_rank_score=85.0,
                      baseline_win_rate=50.0,
-                     adjustments=10.0
+                     adjustments=15.0
                 ),
-                compliance=Compliance(passed_thresholds=True),
-                signal_id=f"{symbol}_DAY_VWAP"
+                compliance=Compliance(passed_thresholds=True), # Ready for Execution
+                signal_id=f"{symbol}_DT_{last.name}"
             )
             
         return None
 
-    def scan(self, symbols: List[str]) -> List[Candidate]:
+    def scan(self, symbols: List[str], market_data: Dict[str, any] = None) -> List[Candidate]:
         candidates = []
-        # TODO: Implement Real Day Trade Scanning (Requires Intraday 1min/5min Data)
-        # We currently only fetch Daily Data, so Day Trade logic is inactive for MVP.
+        if not market_data: return []
+        
+        for symbol, data in market_data.items():
+            res = self.analyze(symbol, data)
+            if res: candidates.append(res)
+            
         return candidates

@@ -41,11 +41,24 @@ class DataLoader:
         for chunk in chunks:
             try:
                 print(f"DEBUG: Fetching chunk of {len(chunk)} symbols...")
+                
+                # 1. Fetch Daily Bars (for Swing & Technicals)
                 bars = self.api.get_bars(
                     chunk,
                     TimeFrame.Day,
                     start=start_date,
                     end=end_date,
+                    adjustment='raw',
+                    feed='iex'
+                ).df
+                
+                # 2. Fetch Intraday Bars (for Day Trading) - Last 5 days of 1Min
+                intra_start = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+                intraday_bars = self.api.get_bars(
+                    chunk,
+                    TimeFrame.Minute, # 1Min
+                    start=intra_start,
+                    limit=1000, # Enough for indicators
                     adjustment='raw',
                     feed='iex'
                 ).df
@@ -56,26 +69,41 @@ class DataLoader:
 
                 # Process per symbol
                 for symbol in chunk:
-                    # Handle MultiIndex logic
+                    # Handle MultiIndex logic for Daily
+                    sym_data = None
                     if isinstance(bars.index, pd.MultiIndex):
                         try:
-                            # Alpaca SDK usually sets symbol as index level 0
-                            # But sometimes it's a column if we reset index?
-                            # Standard SDK behavior:
                             sym_data = bars.xs(symbol)
                         except KeyError:
-                             continue
+                             pass
                     elif 'symbol' in bars.columns:
                         sym_data = bars[bars['symbol'] == symbol].copy()
-                    else:
-                        continue # Unknown format
+                        
+                    if sym_data is None: continue
 
-                    if len(sym_data) < 20: # RELAXED CONSTRAINT (Was 55)
+                    # Handle MultiIndex for Intraday
+                    intra_data = None
+                    if not intraday_bars.empty:
+                        if isinstance(intraday_bars.index, pd.MultiIndex):
+                            try:
+                                intra_data = intraday_bars.xs(symbol)
+                            except KeyError:
+                                pass
+                        elif 'symbol' in intraday_bars.columns:
+                            intra_data = intraday_bars[intraday_bars['symbol'] == symbol].copy()
+
+                    if len(sym_data) < 20: 
                         print(f"DEBUG: Dropping {symbol} - Insufficient History ({len(sym_data)} < 20)")
                         continue 
 
                     processed_data = self._calculate_technicals(sym_data)
+                    
+                    # Attach Intraday DF
+                    processed_data['intraday_df'] = intra_data
+                    
                     results[symbol] = processed_data
+
+
                     
             except Exception as e:
                 print(f"Data Fetch Error (Chunk): {e}")

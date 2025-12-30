@@ -89,10 +89,11 @@ class SwingSetup_20_50:
         direction = Direction.LONG if ema20 > sma50 else Direction.SHORT
         
         # ENTRY PATTERN A: Pullback to 20
-        # Simple check: Price within 1-2% of EMA20
+        # Relaxed check: Price within 10% of EMA20 (Allows Deep RSI Pullbacks)
         dist_pct = abs(close - ema20) / ema20
-        if dist_pct > 0.02: 
-            return None # Not a tight enough pullback
+        if dist_pct > 0.10: 
+            # If it's more than 10% away, it's either a crash or a moonshot. Skip.
+            return None 
             
         # PASSES FILTERS -> Grade it
         scores = self.grader.grade_candidate(symbol, data, direction)
@@ -120,7 +121,7 @@ class SwingSetup_20_50:
         return Candidate(
             section=Section.SWING,
             symbol=symbol,
-            setup_name=self.name,
+            setup_name="Trend Pullback (Wide)",
             direction=direction,
             thesis=f"A+ Setup: {scores.overall_rank_score:.0f}/100. Trend aligned. Pullback to 20EMA.",
             features=data,

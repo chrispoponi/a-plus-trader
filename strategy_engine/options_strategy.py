@@ -90,7 +90,7 @@ class OptionsEngine:
                 baseline_win_rate=70.0,
                 adjustments=0
             ),
-            compliance=Compliance(passed_thresholds=True),
+            compliance=Compliance(passed_thresholds=False), # DISABLED FOR EXECUTION (Research Only)
             signal_id=f"{symbol}_OPT_{strategy.replace(' ','_')}"
         )
 

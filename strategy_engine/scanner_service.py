@@ -46,6 +46,33 @@ class ScannerService:
                             symbols.add(sym.upper())
             except Exception as e:
                 print(f"Error reading automation file {fpath}: {e}")
+
+        # 3. Add TradingView / Finviz CSV Drops
+        import pandas as pd
+        csv_sources = glob.glob("uploads/tradingview/*.csv") + glob.glob("uploads/finviz/*.csv")
+        
+        for csv_path in csv_sources:
+            try:
+                # Basic parsing: Look for 'Ticker' or 'Symbol' column
+                # TradingView exports usually start with specific headers
+                df = pd.read_csv(csv_path)
+                
+                # Normalize columns
+                df.columns = [c.strip().lower() for c in df.columns]
+                
+                col_name = next((c for c in df.columns if c in ['ticker', 'symbol', 'root']), None)
+                
+                if col_name:
+                    extracted = df[col_name].dropna().astype(str).tolist()
+                    # Clean up (remove exchange prefix like 'NASDAQ:NVDA')
+                    cleaned = [s.split(':')[-1].strip().upper() for s in extracted]
+                    symbols.update(cleaned)
+                    print(f"DEBUG: Ingested {len(cleaned)} symbols from {os.path.basename(csv_path)}")
+                else:
+                    print(f"WARNING: No 'Ticker'/'Symbol' column found in {csv_path}")
+
+            except Exception as e:
+                print(f"Error parsing CSV {csv_path}: {e}")
         
         return list(symbols)
 
@@ -72,74 +99,60 @@ class ScannerService:
             raw_options = []
             raw_day = []
 
-            # 3. GET REAL DATA (The Heart Transplant)
-            # We fetch data even if swing disallowed, because Options need it too
+            # 3. GET REAL DATA
             market_data = {}
             scan_ts = "N/A"
-            if allow_swing or allow_options:
+            if allow_swing or allow_options or allow_day:
+                # Fetch FULL data for all initial targets to allow Ranking
                 market_data = data_loader.fetch_snapshot(target_symbols)
                 
-                # [DEBUG MARKER] - Create a timestamp string
                 import datetime
                 scan_ts = datetime.datetime.now().strftime("%H:%M:%S")
                 print(f"DEBUG: Data Fetched at {scan_ts}. Active Tickers: {len(market_data)}")
 
-            if allow_swing: # and market_safe:
-                raw_swing = self.swing_engine.scan(target_symbols, market_data)
-            else:
-                reason = reason_swing if not allow_swing else "Market Context Unsafe"
-                print(f"Skipping Swing Scan: {reason}")
+            # --- ELITE RANKING (Layer 2) ---
+            # Filter 50 -> Top 3 Day / Top 3 Swing
+            from scoring.elite_ranker import elite_ranker
+            top_day_syms, top_swing_syms = elite_ranker.rank_candidates(market_data)
+            
+            print(f"DEBUG: Elite Day: {top_day_syms}")
+            print(f"DEBUG: Elite Swing: {top_swing_syms}")
 
-            if allow_options: # and market_safe:
-                raw_options = self.options_engine.scan(target_symbols, market_data)
+            # 4. EXECUTE ENGINES ON ELITE LISTS
+            
+            # SWING
+            if allow_swing: 
+                # Only scan the Elite 3 for Setup Details
+                raw_swing = self.swing_engine.scan(top_swing_syms, market_data)
             else:
-                reason = reason_options if not allow_options else "Market Context Unsafe"
-                print(f"Skipping Options Scan: {reason}")
+                print(f"Skipping Swing Scan: {reason_swing}")
+
+            # OPTIONS (Follows Swing Leaders)
+            if allow_options: 
+                raw_options = self.options_engine.scan(top_swing_syms, market_data)
+            else:
+                print(f"Skipping Options Scan: {reason_options}")
                 
+            # DAY TRADE
             if allow_day:
-                # TODO: Pass Day Data
-                raw_day = self.day_engine.scan(target_symbols)
+                raw_day = self.day_engine.scan(top_day_syms, market_data)
             else:
                 print(f"Skipping Day Trade Scan: {reason_day}")
             
-            # --- SWING SELECTION (CORE LOGIC) ---
-            swing_final = []
-            # Sort by score
-            raw_swing.sort(key=lambda c: c.scores.overall_rank_score, reverse=True)
-            
-            # Filter Min Score
-            valid_swing = [c for c in raw_swing if c.scores.overall_rank_score >= settings.MIN_SWING_SCORE]
-            
-            # Pick CORE Trades (Top 2 if score >= 80)
-            core_count = 0
-            for cand in valid_swing:
-                # [DEBUG MARKER]
-                cand.setup.setup_name = f"{cand.setup.setup_name} | @{scan_ts}"
-                
-                is_core = False
-                if core_count < 2 and cand.scores.overall_rank_score >= settings.MIN_A_PLUS_SWING_SCORE:
-                    cand.trade_plan.is_core_trade = True
-                    cand.trade_plan.risk_percent = settings.CORE_RISK_PER_TRADE_PERCENT
-                    is_core = True
-                    core_count += 1
-                else:
-                     cand.trade_plan.risk_percent = settings.MAX_RISK_PER_TRADE_PERCENT
-                
-                # AI SANITY CHECK
-                if is_core:
-                    try:
-                        cand.ai_analysis = await llm_analyzer.analyze_candidate(cand)
-                    except Exception as e:
-                        print(f"AI Analysis Failed: {e}")
-                        cand.ai_analysis = "AI Analysis Error"
+            # --- FINAL ASSEMBLY ---
+            swing_final = raw_swing # Already filtered to top 3 by ranker effectively
+            options_final = raw_options
+            day_final = raw_day 
 
-                swing_final.append(cand)
-                
-            # --- OPTIONS SELECTION ---
-            options_final = raw_options[:3] 
-
-            # --- DAY SELECTION ---
-            day_final = raw_day[:3] 
+            # (No need for extra sorting here as Lists are short, but we can verify)
+            
+            # Apply Core Logic / AI Check on Swing
+            for cand in swing_final:
+                 cand.setup.setup_name = f"{cand.setup.setup_name}"
+                 cand.scores.overall_rank_score = 99.0 # Elite
+                 try:
+                     cand.ai_analysis = await llm_analyzer.analyze_candidate(cand)
+                 except: pass 
             
             # [SYSTEM STATUS CARD]
             try:
@@ -184,6 +197,25 @@ class ScannerService:
                 swing_final.insert(0, info_setup)
             except Exception as e:
                 print(f"Error creating Info Card: {e}")
+
+            # --- AUTO EXECUTION ---
+            if settings.AUTO_EXECUTION_ENABLED:
+                from executor_service.order_executor import executor
+                print("⚡ AUTO-EXECUTION: Processing Elite Signals...")
+                
+                # Execute Day Trades
+                for cand in day_final:
+                    if cand.symbol not in ["SYSTEM", "ERROR", "DATA_FAIL"]:
+                        res = executor.execute_trade(cand)
+                        cand.setup.setup_name += f" [{res}]"
+                
+                # Execute Swing Trades
+                for cand in swing_final:
+                    if cand.symbol not in ["SYSTEM", "ERROR", "DATA_FAIL"]:
+                         res = executor.execute_trade(cand)
+                         cand.setup.setup_name += f" [{res}]"
+            else:
+                 print("ℹ️ Auto-Execution Disabled (Signal only).")
 
             results = {
                 Section.SWING.value: swing_final,

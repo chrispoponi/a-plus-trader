@@ -32,7 +32,9 @@ class TradingRules:
             
         # 2. OBSERVATION ZONE (9:40-10:00)
         if segment == "OBSERVATION_ZONE":
-            return False, "Structure formation period (9:40-10:00). Observe only."
+            if section == Section.DAY_TRADE:
+                return True, "Day Trading Allowed (Early Momentum)."
+            return False, "Structure formation period (9:40-10:00). Swings Paused."
 
         # 3. MONEY WINDOW (10:00-10:30)
         if segment == "MONEY_WINDOW":

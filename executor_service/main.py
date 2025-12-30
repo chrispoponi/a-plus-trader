@@ -143,6 +143,19 @@ async def force_scan_debug():
             "trace": traceback.format_exc()
         }
 
+@app.get("/api/journal/stats")
+async def journal_stats():
+    """Returns Win Rate, R-Multiple, and Equity Curve."""
+    from executor_service.trade_logger import trade_logger
+    return trade_logger.generate_analytics()
+
+@app.post("/api/journal/update")
+async def update_journal(background_tasks: BackgroundTasks):
+    """Triggers reconciliation of closed trades."""
+    from executor_service.trade_logger import trade_logger
+    background_tasks.add_task(trade_logger.update_closed_trades)
+    return {"status": "reconciliation_started"}
+
 @app.on_event("startup")
 def on_startup():
     start_scheduler()
