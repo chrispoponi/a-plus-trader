@@ -219,7 +219,8 @@ async def get_alpaca_positions():
                 "current_price": 0
             }]
         
-        raw_positions = executor.api.get_all_positions()
+        # FIX: 'REST' object has no attribute 'get_all_positions'. Use 'list_positions'.
+        raw_positions = executor.api.list_positions()
         data = []
         for p in raw_positions:
             try:
