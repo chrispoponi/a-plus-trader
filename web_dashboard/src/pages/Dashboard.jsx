@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { Play, Activity, TrendingUp, ShieldCheck } from 'lucide-react';
+import PerformanceChart from '../components/PerformanceChart';
 
 const Dashboard = () => {
     const [status, setStatus] = useState(null);
@@ -65,6 +66,9 @@ const Dashboard = () => {
                     </p>
                 </div>
             </div>
+
+            {/* Equity Curve Chart */}
+            <PerformanceChart trades={history} />
 
             {/* Performance Log */}
             <div className="bg-pro-card rounded-xl border border-gray-700 overflow-hidden">
