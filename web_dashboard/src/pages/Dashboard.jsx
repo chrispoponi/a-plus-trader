@@ -25,7 +25,7 @@ const Dashboard = () => {
 
     return (
         <div className="p-6 space-y-8">
-            <h1 className="text-3xl font-bold text-white">Mission Control</h1>
+            <h1 className="text-3xl font-bold text-white">Mission Control v2.1 (Elite)</h1>
 
             {/* Status Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

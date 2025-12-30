@@ -3,10 +3,15 @@ import axios from 'axios';
 // PRODUCTION URL (Render)
 const API_BASE_URL = 'https://a-plus-trader.onrender.com';
 
+const axiosInstance = axios.create({
+    baseURL: API_BASE_URL,
+    timeout: 60000, // 60 seconds
+});
+
 export const api = {
     getHealth: async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/`);
+            const res = await axiosInstance.get(`/`);
             return res.data;
         } catch (error) {
             console.error("Health Check Failed", error);
@@ -15,7 +20,7 @@ export const api = {
     },
     runScan: async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/scan`);
+            const res = await axiosInstance.get(`/scan`);
             return res.data;
         } catch (error) {
             console.error("Scan Failed", error);
@@ -24,7 +29,7 @@ export const api = {
     },
     getUploads: async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/upload/list`);
+            const res = await axiosInstance.get(`/upload/list`);
             return res.data;
         } catch (error) {
             console.error("Fetch Uploads Failed", error);
@@ -33,7 +38,7 @@ export const api = {
     },
     uploadFile: async (endpoint, formData) => {
         try {
-            const res = await axios.post(`${API_BASE_URL}/upload/${endpoint}`, formData, {
+            const res = await axiosInstance.post(`/upload/${endpoint}`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             return res.data;
@@ -44,7 +49,7 @@ export const api = {
     },
     getJournalStats: async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/api/journal/stats`);
+            const res = await axiosInstance.get(`/api/journal/stats`);
             return res.data;
         } catch (error) {
             return {};
@@ -52,7 +57,7 @@ export const api = {
     },
     getJournalHistory: async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/api/journal/history`);
+            const res = await axiosInstance.get(`/api/journal/history`);
             return res.data;
         } catch (error) {
             return [];
@@ -60,7 +65,7 @@ export const api = {
     },
     liquidateAll: async () => {
         try {
-            const res = await axios.post(`${API_BASE_URL}/api/emergency/liquidate`);
+            const res = await axiosInstance.post(`/api/emergency/liquidate`);
             return res.data;
         } catch (error) {
             console.error("Liquidation Failed", error);

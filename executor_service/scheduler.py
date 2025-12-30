@@ -43,15 +43,13 @@ async def scheduled_market_scan(scan_name: str):
     if core_swings:
         msg_lines.append(f"🟢 **CORE SWINGS DETECTED**: {len(core_swings)}")
         for c in core_swings:
-            # AUTO EXECUTE TRADES
-            # Rules: Must be Core (>80) AND have Positive AI Analysis
-            ai_pass = c.ai_analysis and "Bearish" not in c.ai_analysis and "Error" not in c.ai_analysis
+            # AUTO EXECUTE TRADES handled by ScannerService internally.
+            # We just report status here.
             
-            # TODO: Uncomment strict AI gate if desired. For now, execute all Core.
-            status = executor.execute_trade(c)
+            # TODO: We could check order status from executor to report success?
+            # For now, assume Scanner handles it.
             
-            emoji = "🚀" if "SUCCESS" in status else "⚠️"
-            msg_lines.append(f"- {c.symbol}: Score {c.scores.overall_rank_score} | Exec: {emoji} ({status})")
+            msg_lines.append(f"- {c.symbol}: Score {c.scores.overall_rank_score} | (Auto-Handling)")
     else:
         msg_lines.append("No Core Swings.")
         
