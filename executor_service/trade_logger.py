@@ -60,15 +60,88 @@ class TradeLogger:
             
         print(f"📝 LOGGED TRADE: {symbol} in {JOURNAL_FILE}")
 
+    def sync_open_positions(self):
+        """
+        SELF-HEAL: Fetches live Alpaca positions and ensures they are in the journal.
+        If a position exists in Alpaca but not the Journal (e.g. after restart), it 'seeds' it.
+        """
+        if not self.api: return
+        try:
+            positions = self.api.list_positions()
+        except: return
+
+        # Load or Create Journal
+        journal = pd.DataFrame()
+        if os.path.exists(JOURNAL_FILE):
+            journal = pd.read_csv(JOURNAL_FILE)
+            
+        # Get set of currently logged OPEN symbols
+        logged_open_symbols = set()
+        if not journal.empty:
+             logged_open_symbols = set(journal[journal["status"] == "OPEN"]["symbol"].values)
+
+        new_trades = []
+        for p in positions:
+            if p.symbol not in logged_open_symbols:
+                # Discovered an Orphan Position. Seed it.
+                print(f"⚠️ SEEDING ORPHAN POSITION: {p.symbol}")
+                qty = float(p.qty)
+                entry = float(p.avg_entry_price)
+                side = "LONG" if qty > 0 else "SHORT"
+                
+                # Approximate risk (we don't know original stop)
+                # Assume 2% risk for logging purposes
+                stop = entry * 0.98 if side == "LONG" else entry * 1.02 
+                risk = abs(entry - stop) * abs(qty)
+                
+                trade = {
+                    "trade_id": str(uuid.uuid4()),
+                    "symbol": p.symbol,
+                    "bucket": "SEEDED",
+                    "side": side,
+                    "entry_time": datetime.utcnow().isoformat(), # Use specific format for consistency
+                    "entry_price": entry,
+                    "exit_time": None,
+                    "exit_price": None,
+                    "qty": qty,
+                    "stop_price": stop,
+                    "target_price": None,
+                    "risk_dollars": risk,
+                    "pnl_dollars": None,
+                    "pnl_percent": None,
+                    "r_multiple": None,
+                    "holding_minutes": None,
+                    "status": "OPEN",
+                    "notes": "Recovered from Alpaca Api"
+                }
+                new_trades.append(trade)
+
+        if new_trades:
+            df_new = pd.DataFrame(new_trades)
+            # Append safely
+            if not journal.empty:
+                journal = pd.concat([journal, df_new], ignore_index=True)
+            else:
+                journal = df_new
+                
+            journal.to_csv(JOURNAL_FILE, index=False)
+            print(f"✅ SYNC: Recovered {len(new_trades)} positions into Journal.")
+
     def update_closed_trades(self):
         """
         Reconciles OPEN trades with Alpaca Order History to enable PnL tracking.
+        Also triggers Sync to catch orphans.
         """
+        # First, ensure we track everything we hold
+        self.sync_open_positions()
+
         if not os.path.exists(JOURNAL_FILE): return
         if not self.api: return
-
+        
+        # Reload after sync
         journal = pd.read_csv(JOURNAL_FILE)
         # Handle 'entry_time' parsing carefully
+        # ... (Rest of logic)
         journal["entry_time"] = pd.to_datetime(journal["entry_time"]) 
         open_trades = journal[journal["status"] == "OPEN"]
         
