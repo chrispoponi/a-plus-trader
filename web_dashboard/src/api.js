@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+// PRODUCTION URL (Render)
+const API_BASE_URL = 'https://a-plus-trader.onrender.com';
 
 export const api = {
     getHealth: async () => {
