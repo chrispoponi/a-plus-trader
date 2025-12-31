@@ -17,12 +17,14 @@ from strategy_engine.indicators.vdubus_engine import VdubusEngine
 from strategy_engine.indicators.breakout_engine import BreakoutEngine
 from strategy_engine.data_loader import data_loader
 from strategy_engine.market_hunter import MarketHunter
+from strategy_engine.warrior_strategy import WarriorStrategy
 
 class ScannerService:
     def __init__(self):
         self.swing_engine = SwingStrategyEngine()
         self.options_engine = OptionsEngine()
         self.day_engine = DayTradeEngine()
+        self.warrior_engine = WarriorStrategy() # New
         self.vdubus_engine = VdubusEngine()
         self.breakout_engine = BreakoutEngine()
         self.hunter = MarketHunter()
@@ -76,6 +78,73 @@ class ScannerService:
                 print(f"Error parsing CSV {csv_path}: {e}")
         
         return list(symbols)
+
+    async def _run_warrior_scan(self) -> List[Candidate]:
+        """
+        Specialized Scan for Ross Cameron Momentum Gappers.
+        """
+        try:
+             # 1. Get List (Re-using Hunter logic simplified)
+             # Ideally we call a centralized "Gapper Service" but for now inline is fast.
+             # We need to import API here or reuse data_loader's connection if exposed
+             from alpaca_trade_api.rest import REST
+             api = REST(settings.APCA_API_KEY_ID, settings.APCA_API_SECRET_KEY, base_url=settings.APCA_API_BASE_URL)
+             
+             assets = api.list_assets(status='active', asset_class='us_equity')
+             # Filter: Exchange and Tradable
+             symbols = [a.symbol for a in assets if a.exchange in ['NASDAQ', 'NYSE', 'AMEX'] and a.tradable]
+             
+             # Chunked Snapshot Fetch
+             chunk_size = 1000
+             candidates_5min = []
+             
+             # Optimization: Only scan top 1000 symbols or so to speed up? 
+             # Or just do first 2 chunks.
+             for i in range(0, min(len(symbols), 2000), chunk_size):
+                  chunk = symbols[i:i+chunk_size]
+                  try:
+                      snaps = api.get_snapshots(chunk)
+                      for sym, snap in snaps.items():
+                          if not snap.daily_bar: continue
+                          p = snap.daily_bar.c
+                          if not (2.0 <= p <= 20.0): continue
+                          
+                          prev = snap.prev_daily_bar.c
+                          if not prev: continue
+                          change = (p - prev) / prev
+                          
+                          if change >= 0.10: # 10% Gap
+                             candidates_5min.append(sym)
+                  except: pass
+                  
+             if not candidates_5min: return []
+             
+             # Fetch 5Min Data for candidates
+             res_candidates = []
+             for sym in candidates_5min:
+                 # Fetch 5 min bars
+                 try: 
+                     bars = api.get_bars(sym, "5Min", limit=100).df
+                     if bars.empty: continue
+                     
+                     # Construct Feature Dict
+                     row = bars.iloc[-1]
+                     f_dict = {
+                         "row": row,
+                         "intraday_df": bars,
+                         "current_date": row.name, # Timestamp
+                         "vol_avg": bars['volume'].rolling(20).mean().iloc[-1]
+                     }
+                     
+                     cand = self.warrior_engine.analyze(sym, f_dict)
+                     if cand: res_candidates.append(cand)
+                 except: pass
+                 
+             return res_candidates
+
+        except Exception as e:
+            print(f"Warrior Scan Error: {e}")
+            return []
 
     async def run_scan(self) -> Dict[str, List[Candidate]]:
         try:
@@ -140,10 +209,17 @@ class ScannerService:
             else:
                 print(f"Skipping Day Trade Scan: {reason_day}")
             
+            # WARRIOR SCAN (Parallel or Sequential)
+            warrior_raw = []
+            if allow_day: # Warrior is a day strategy
+                 print("DEBUG: Running Warrior Scan...")
+                 warrior_raw = await self._run_warrior_scan()
+
             # --- FINAL ASSEMBLY ---
-            swing_final = raw_swing # Already filtered to top 3 by ranker effectively
+            swing_final = raw_swing 
             options_final = raw_options
-            day_final = raw_day 
+            day_final = raw_day + warrior_raw # Merge Day & Warrior
+ 
 
             # (No need for extra sorting here as Lists are short, but we can verify)
             
