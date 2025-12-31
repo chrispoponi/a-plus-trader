@@ -167,6 +167,29 @@ class OrderExecutor:
                 print(f"LOGGER FAIL: {log_err}")
             # -----------------------
 
+            # --- DISCORD NOTIFICATION ---
+            try:
+                from utils.notifications import notifier
+                
+                # Determine Bot Name
+                bot_name = "🦅 SWING BOT"
+                if candidate.section == "SCALP": bot_name = "⚔️ WARRIOR BOT"
+                elif candidate.section == "OPTIONS": bot_name = "🎯 OPTIONS BOT"
+                elif candidate.section == "DAY_TRADE": bot_name = "⚡ DAY BOT"
+                
+                msg = (
+                    f"**Action:** {side.upper()} {qty} shares\n"
+                    f"**Entry:** ${plan.entry:.2f}\n"
+                    f"**Stop:** ${plan.stop_loss:.2f}\n"
+                    f"**Target:** ${plan.take_profit:.2f}\n"
+                    f"**Setup:** {candidate.setup_name}"
+                )
+                
+                notifier.send_message(f"{bot_name}: {symbol}", msg, color=0x00ff00)
+            except Exception as note_err:
+                print(f"DISCORD FAIL: {note_err}")
+            # ----------------------------
+
             print(f"ORDER SUBMITTED: {order.id}")
             return f"SUCCESS_{order.id}"
             
