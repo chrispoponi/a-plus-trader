@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 // PRODUCTION URL (Render)
-const API_BASE_URL = 'https://a-plus-trader.onrender.com';
+// const API_BASE_URL = 'https://a-plus-trader.onrender.com';
+const API_BASE_URL = 'http://localhost:8000'; // Local Dev
 
 const axiosInstance = axios.create({
     baseURL: API_BASE_URL,

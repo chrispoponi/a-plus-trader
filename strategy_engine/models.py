@@ -7,6 +7,7 @@ class Section(str, Enum):
     BREAKOUT = "BREAKOUT SETUP"
     OPTIONS = "OPTIONS SETUP"
     DAY_TRADE = "DAY TRADE SETUP"
+    SCALP = "SCALP SETUP"
 
 class Direction(str, Enum):
     LONG = "LONG"

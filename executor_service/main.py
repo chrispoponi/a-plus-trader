@@ -166,19 +166,37 @@ async def journal_history():
     return trade_logger.get_trade_history()
 
 @app.post("/api/emergency/liquidate")
-async def emergency_liquidate():
+async def emergency_liquidate(background_tasks: BackgroundTasks):
     """
     KILL SWITCH: Liquidates all positions (Market Sell) and Cancels all open orders.
+    Runs in background to ensure immediate UI response.
     """
     try:
         from executor_service.order_executor import executor
         if not executor.api:
             return {"status": "error", "message": "Alpaca API not connected"}
         
-        # Alpaca native 'close all'
-        executor.api.close_all_positions(cancel_orders=True)
-        print("🚨 EMERGENCY: LIQUIDATE ALL TRIGGERED")
-        return {"status": "success", "message": "Liquidate All Signal Sent"}
+        def _liquidate_sync():
+            try:
+                from utils.notifications import notifier
+                print("🚨 EMERGENCY: STARTING LIQUIDATION...")
+                # Alpaca native 'close all'
+                executor.api.close_all_positions(cancel_orders=True)
+                print("🚨 EMERGENCY: LIQUIDATION COMPLETE.")
+                notifier.send_message("🚨 CRITICAL", "LIQUIDATE ALL TRIGGERED. All positions closed.", color=0xff0000)
+            except Exception as e:
+                print(f"LIQUIDATION FATAL ERROR: {e}")
+                # Try simple print if notifier fails
+                try:
+                    from utils.notifications import notifier
+                    notifier.send_message("❌ LIQUIDATION ERROR", str(e), color=0xff0000)
+                except:
+                    pass
+
+        # Run in background (threadpool essentially)
+        background_tasks.add_task(_liquidate_sync)
+        
+        return {"status": "success", "message": "Liquidation Sequence Initiated (Background)"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -278,9 +296,13 @@ async def get_alpaca_positions():
                 "current_price": 0
             }]
 
+from utils.notifications import notifier
+from executor_service.scheduler import start_scheduler
+
 @app.on_event("startup")
 def on_startup():
     start_scheduler()
+    notifier.send_message("🦅 SWING BOT: ONLINE", "System Initialized. API and Scheduler Active.", color=0x00ff00)
 
 if __name__ == "__main__":
     import uvicorn

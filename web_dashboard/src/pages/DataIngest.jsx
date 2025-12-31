@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 import { UploadCloud, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 
 const UploadCard = ({ title, endpoint, description, accept }) => {
@@ -15,11 +15,9 @@ const UploadCard = ({ title, endpoint, description, accept }) => {
         formData.append('file', file);
 
         try {
-            const res = await axios.post(`http://localhost:8000/upload/${endpoint}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            const res = await api.uploadFile(endpoint, formData);
             setStatus('success');
-            setMessage(res.data.message);
+            setMessage(res.message);
             // Reset after 3 seconds
             setTimeout(() => { setStatus('idle'); setMessage(''); }, 3000);
         } catch (error) {

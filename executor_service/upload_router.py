@@ -18,8 +18,10 @@ async def _save_file(file: UploadFile, source: str) -> str:
     safe_filename = f"{timestamp}_{file.filename}"
     file_path = f"{UPLOAD_DIR}/{source}/{safe_filename}"
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # Async Read/Write prevents blocking
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
         
     return file_path
 

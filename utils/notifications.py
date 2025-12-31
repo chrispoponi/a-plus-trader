@@ -2,6 +2,9 @@ import os
 import requests
 from datetime import datetime
 import pytz
+from dotenv import load_dotenv
+
+load_dotenv("secrets.env")
 
 class NotificationService:
     def __init__(self):

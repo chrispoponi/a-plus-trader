@@ -198,8 +198,12 @@ const ControlCenter = () => {
                 <button
                     onClick={async () => {
                         if (confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will immediately MARKET SELL all open positions and CANCEL all orders.\n\nAre you sure you want to go to 100% CASH?")) {
-                            await api.liquidateAll();
-                            alert("Liquidation Signal Sent. Check Alpaca.");
+                            try {
+                                await api.liquidateAll();
+                                alert("Liquidation Sequence Initiated.");
+                            } catch (e) {
+                                alert("LIQUIDATION FAILED: " + e.message);
+                            }
                         }
                     }}
                     className="flex items-center gap-2 bg-red-600 hover:bg-red-700 transition-colors px-6 py-3 rounded-lg font-bold shadow-lg shadow-red-900/20 text-white border border-red-500"

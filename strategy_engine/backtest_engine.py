@@ -10,6 +10,11 @@ from strategy_engine.swing_setups import SwingSetup_20_50
 from strategy_engine.day_trade_strategy import DayTradeEngine
 from strategy_engine.experimental_strategies import DonchianBreakoutStrategy, RSI2MeanReversionStrategy
 from strategy_engine.elite_strategy import SwingSetup_Elite
+from strategy_engine.kellog_strategy import KellogStrategy
+from strategy_engine.congress_strategy import CongressStrategy
+from strategy_engine.buffett_strategy import BuffettStrategy
+from strategy_engine.rsi_bands_strategy import RSIBandsStrategy
+from strategy_engine.warrior_strategy import WarriorStrategy
 from strategy_engine.models import Direction
 import warnings
 
@@ -41,8 +46,20 @@ class BacktestEngine:
             self.setup = SwingSetup_Elite()
         elif strategy_type == 'OPTIONS_SIM':
             self.setup = SwingSetup_Elite() # Signals from Elite, Execution is Options
+        elif strategy_type == 'OPTIONS_INVERSE':
+            self.setup = SwingSetup_Elite() # Signals from Elite, Inverted Execution
         elif strategy_type == 'SNIPER_OPTIONS':
             self.setup = DayTradeEngine() # Signals from Day Trade, Execution is Options
+        elif strategy_type == 'KELLOG':
+            self.setup = KellogStrategy()
+        elif strategy_type == 'CONGRESS':
+            self.setup = CongressStrategy()
+        elif strategy_type == 'BUFFETT':
+            self.setup = BuffettStrategy()
+        elif strategy_type == 'RSI_BANDS':
+            self.setup = RSIBandsStrategy()
+        elif strategy_type == 'WARRIOR':
+            self.setup = WarriorStrategy()
             
         self.initial_capital = 100000.0
         self.cash = self.initial_capital
@@ -129,6 +146,25 @@ class BacktestEngine:
                 df['volume_dry_up'] = df['volume'] < (df['vol_avg_20'] * 0.7)
                 df['sector_rs'] = False 
                 
+            elif self.strategy_type == 'KELLOG':
+                # Need VWAP, ATR, and Volume Average for exits
+                # VWAP (Cumulative calculation, typically intraday)
+                # For daily bars, a simple approximation or using a different indicator might be needed.
+                # Assuming 'vwap' is available or calculated by the strategy engine for intraday.
+                # For daily, we'll use a simple moving average as a proxy if VWAP isn't directly available.
+                df['vwap'] = (df['close'] * df['volume']).cumsum() / df['volume'].cumsum()
+                
+                # ATR (14-period)
+                high_low = df['high'] - df['low']
+                high_close = (df['high'] - df['close'].shift()).abs()
+                low_close = (df['low'] - df['close'].shift()).abs()
+                ranges = pd.concat([high_low, high_close, low_close], axis=1)
+                true_range = np.max(ranges, axis=1)
+                df['atr'] = true_range.rolling(14).mean()
+                
+                # Volume Average (e.g., 20-period)
+                df['vol_avg'] = df['volume'].rolling(20).mean()
+                         
             elif self.strategy_type == 'DONCHIAN':
                 # Donchian Channels (20 High, 10 Low)
                 # Shift by 1 so we compare Close vs Previous Highs
@@ -149,7 +185,25 @@ class BacktestEngine:
                 # Fix NaNs or Inf
                 df['rsi2'] = df['rsi2'].fillna(50)
 
-            elif self.strategy_type == 'ELITE' or self.strategy_type == 'OPTIONS_SIM':
+            elif self.strategy_type == 'RSI_BANDS':
+                # Bollinger Bands (20, 2)
+                df['sma20'] = df['close'].rolling(window=20).mean()
+                std20 = df['close'].rolling(window=20).std()
+                df['upper_bb'] = df['sma20'] + (std20 * 2)
+                df['lower_bb'] = df['sma20'] - (std20 * 2)
+                
+                # SMA 50
+                df['sma50'] = df['close'].rolling(window=50).mean()
+                
+                # RSI 14
+                delta = df['close'].diff()
+                gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+                rs = gain / loss
+                df['rsi'] = 100 - (100 / (1 + rs))
+                df['rsi'] = df['rsi'].fillna(50)
+            
+            elif self.strategy_type == 'ELITE' or self.strategy_type == 'OPTIONS_SIM' or self.strategy_type == 'OPTIONS_INVERSE':
                 # Need ADX(14) and RSI(14)
                 
                 # RSI 14
@@ -208,10 +262,12 @@ class BacktestEngine:
 
     def run(self, symbols: List[str], days=252):
         print(f"\n--- 🦅 HARMONIC EAGLE BACKTESTER ---\nStrategy: {self.strategy_type}\nPeriod: Last {days} Days\nCapital: ${self.initial_capital:,.2f}\n")
-        
         # Select Timeframe
-        if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS':
+        tf_str = '1Day'
+        if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS' or self.strategy_type == 'KELLOG' or self.strategy_type == 'WARRIOR':
              tf_str = '5Min'
+        
+        # CONGRESS and BUFFETT use 1Day default
              
         data_map = self.fetch_backtest_data(symbols, days, timeframe_str=tf_str)
 
@@ -293,9 +349,15 @@ class BacktestEngine:
                  elif low <= pos['take_profit']: exit_price, reason = pos['take_profit'], "TAKE_PROFIT"
             
             # Time / EOD Stop / Strategy Specific Exits
-            if self.strategy_type == 'SWING' or self.strategy_type == 'ELITE' or self.strategy_type == 'OPTIONS_SIM':
+            if self.strategy_type == 'SWING' or self.strategy_type == 'ELITE' or self.strategy_type == 'OPTIONS_SIM' or self.strategy_type == 'OPTIONS_INVERSE':
                  if (current_time - pos['entry_date']).days >= 7:
                      exit_price, reason = close, "TIME_STOP"
+            elif self.strategy_type == 'CONGRESS':
+                 if (current_time - pos['entry_date']).days >= 30:
+                     exit_price, reason = close, "PELOSI_EXIT_30D"
+            elif self.strategy_type == 'BUFFETT':
+                 if (current_time - pos['entry_date']).days >= 365:
+                     exit_price, reason = close, "VALUE_EXIT_1YR"
             elif self.strategy_type == 'DAY':
                  if current_time.time() >= time(15, 55):
                      exit_price, reason = close, "EOD_EXIT"
@@ -328,6 +390,31 @@ class BacktestEngine:
                 elif rsi2 > 90:
                     exit_price, reason = close, "RSI_EXTREME"
 
+            elif self.strategy_type == 'RSI_BANDS':
+                # EXIT RULES
+                # 1. RSI > 75 (Overbought)
+                # 2. Price > Upper BB (Extension)
+                # 3. PROFIT PROTECTION: If PnL > 0.5% and turning red (Close < Open or Close < PrevClose), SELL.
+                
+                rsi = float(row.get('rsi', 50))
+                upper_bb = float(row.get('upper_bb', 99999))
+                sma50 = float(row.get('sma50', 0))
+                
+                # Calculate current PnL %
+                curr_pnl_pct = (close - pos['entry_price']) / pos['entry_price']
+                
+                if rsi > 75:
+                    exit_price, reason = close, "RSI_EXIT_75"
+                elif close > upper_bb:
+                    exit_price, reason = close, "BB_EXTENSION_EXIT"
+                elif curr_pnl_pct > 0.005: 
+                    # > 0.5% Profit
+                    # Check for Reversal (Bearish Candle or Close < Prev High)
+                    # Simple: If Close < Open (Red Candle Day), take the profit.
+                    is_red_candle = close < float(row.get('open', 0))
+                    if is_red_candle:
+                         exit_price, reason = close, "PROFIT_PROTECT_0.5%"
+                
             if exit_price:
                 # PnL Calculation
                 stock_pnl_pct = 0
@@ -345,6 +432,26 @@ class BacktestEngine:
                     if option_pnl_pct < -1.0: option_pnl_pct = -1.0
                     
                     capital_allocated = pos['entry_price'] * pos['qty'] 
+                    pnl = capital_allocated * option_pnl_pct
+                    self.cash += (capital_allocated + pnl)
+
+                elif self.strategy_type == 'OPTIONS_INVERSE':
+                    # FADE THE TREND (Buy PUTS on Long Signal)
+                    # Direction: SHORT (We are Shorting the Stock via Puts)
+                    
+                    # Stock PnL for Short
+                    # If Stock +2%, Short PnL = -2%
+                    # If Stock -2%, Short PnL = +2%
+                    short_stock_pnl_pct = (pos['entry_price'] - exit_price) / pos['entry_price']
+                    
+                    # Option Leverage (10x)
+                    days_held = (current_time - pos['entry_date']).days
+                    theta_loss_pct = days_held * 0.03
+                    
+                    option_pnl_pct = (short_stock_pnl_pct * 10.0) - theta_loss_pct
+                    if option_pnl_pct < -1.0: option_pnl_pct = -1.0
+                    
+                    capital_allocated = pos['entry_price'] * pos['qty']
                     pnl = capital_allocated * option_pnl_pct
                     self.cash += (capital_allocated + pnl)
 
@@ -390,11 +497,14 @@ class BacktestEngine:
             
             # Universal Feature Dict (Pass everything available)
             feature_dict = row.to_dict()
+            feature_dict['row'] = row # Pass full row access
+            feature_dict['df'] = df
+            feature_dict['current_date'] = current_time
             
             # Map index/special fields if needed
             # (row.to_dict handles close, high, low, ema20, rsi2, etc automatically)
             
-            if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS':
+            if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS' or self.strategy_type == 'KELLOG' or self.strategy_type == 'WARRIOR':
                  idx_pos = df.index.get_loc(current_time)
                  if isinstance(idx_pos, slice): idx_pos = idx_pos.start
                  if idx_pos < 50: continue
