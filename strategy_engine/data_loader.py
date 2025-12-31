@@ -167,4 +167,50 @@ class DataLoader:
             "prev_close": float(prev['close'])
         }
 
+        return results
+
+    def fetch_intraday_snapshot(self, symbols: List[str], timeframe='5Min') -> Dict[str, Any]:
+        """
+        Lightweight fetch for Intraday Scanners (Sniper Mode).
+        Fetches last 5 days of 5Min bars.
+        """
+        if not self.api: return {}
+        
+        results = {}
+        intra_start = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+        
+        # Use string '5Min' or '1Min' for simplicity as per backtest
+        tf = timeframe
+        
+        print(f"DEBUG: Sniper Fetch ({tf}) for {len(symbols)} symbols...")
+        
+        try:
+             # Fetch all at once (or chunk if large)
+             bars = self.api.get_bars(
+                symbols,
+                tf,
+                start=intra_start,
+                limit=1000,
+                adjustment='raw', 
+                feed='iex'
+             ).df
+             
+             if bars.empty: return {}
+             
+             for sym in symbols:
+                df = None
+                if isinstance(bars.index, pd.MultiIndex):
+                    try: df = bars.xs(sym).copy()
+                    except: pass
+                elif 'symbol' in bars.columns:
+                    df = bars[bars['symbol'] == sym].copy()
+                
+                if df is not None:
+                     results[sym] = {'intraday_df': df}
+                     
+        except Exception as e:
+            print(f"Sniper Data Error: {e}")
+            
+        return results
+
 data_loader = DataLoader()
