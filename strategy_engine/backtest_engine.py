@@ -10,7 +10,6 @@ from strategy_engine.swing_setups import SwingSetup_20_50
 from strategy_engine.day_trade_strategy import DayTradeEngine
 from strategy_engine.experimental_strategies import DonchianBreakoutStrategy, RSI2MeanReversionStrategy
 from strategy_engine.elite_strategy import SwingSetup_Elite
-from strategy_engine.vwap_sniper import VWAPSniperStrategy
 from strategy_engine.models import Direction
 import warnings
 
@@ -44,8 +43,6 @@ class BacktestEngine:
             self.setup = SwingSetup_Elite() # Signals from Elite, Execution is Options
         elif strategy_type == 'SNIPER_OPTIONS':
             self.setup = DayTradeEngine() # Signals from Day Trade, Execution is Options
-        elif strategy_type == 'VWAP_SNIPER':
-            self.setup = VWAPSniperStrategy() 
             
         self.initial_capital = 100000.0
         self.cash = self.initial_capital
@@ -213,29 +210,11 @@ class BacktestEngine:
         print(f"\n--- 🦅 HARMONIC EAGLE BACKTESTER ---\nStrategy: {self.strategy_type}\nPeriod: Last {days} Days\nCapital: ${self.initial_capital:,.2f}\n")
         
         # Select Timeframe
-        if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS' or self.strategy_type == 'VWAP_SNIPER':
+        if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS':
              tf_str = '5Min'
              
         data_map = self.fetch_backtest_data(symbols, days, timeframe_str=tf_str)
 
-        # Pre-Calculate VWAP for VWAP_SNIPER
-        if self.strategy_type == 'VWAP_SNIPER':
-            print("BACKTEST: Pre-calculating VWAP...")
-            for sym, df in data_map.items():
-                # VWAP per Day (Must reset daily)
-                # Group by Date
-                # df.index is DatetimeIndex
-                # vwap = (cum_vol_price) / cum_vol
-                try:
-                    df['pv'] = df['close'] * df['volume'] # Simplified VWAP using Close (or HLC3)
-                    # Correct: HLC3
-                    df['hlc3'] = (df['high'] + df['low'] + df['close']) / 3
-                    df['pv'] = df['hlc3'] * df['volume']
-                    
-                    df['vwap'] = df.groupby(df.index.date)['pv'].cumsum() / df.groupby(df.index.date)['volume'].cumsum()
-                except Exception as e:
-                    print(f"VWAP Calc Fail {sym}: {e}")
-        
         if not data_map:
             print("No data availability.")
             return
@@ -332,15 +311,6 @@ class BacktestEngine:
                  # We set generous stops in entry, but here we enforce Time strictly.
                  # Let's rely on pos['take_profit'] and pos['stop_loss'] for price, which we must set correctly in _process_entries.
                  
-            elif self.strategy_type == 'VWAP_SNIPER':
-                # EXIT FAIL: Price closes below VWAP (for Long)
-                vwap = float(row.get('vwap', 0))
-                if vwap > 0:
-                     if is_long and close < vwap:
-                         exit_price, reason = close, "VWAP_FAIL_EXIT"
-                     if not is_long and close > vwap:
-                         exit_price, reason = close, "VWAP_FAIL_EXIT"
-                         
             elif self.strategy_type == 'DONCHIAN':
                 # Trailing Stop: Low of last 10 days
                 # We need 'low_10' from data.
@@ -424,7 +394,7 @@ class BacktestEngine:
             # Map index/special fields if needed
             # (row.to_dict handles close, high, low, ema20, rsi2, etc automatically)
             
-            if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS' or self.strategy_type == 'VWAP_SNIPER':
+            if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS':
                  idx_pos = df.index.get_loc(current_time)
                  if isinstance(idx_pos, slice): idx_pos = idx_pos.start
                  if idx_pos < 50: continue
