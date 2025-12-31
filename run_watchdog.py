@@ -12,14 +12,15 @@ from utils.notifications import notifier
 
 PROCESS_NAMES = {
     "SWING BOT": "executor_service/main.py",
-    "SNIPER BOT": "run_sniper_bot.py"
+    "SNIPER BOT": "run_sniper_bot.py",
+    "WARRIOR BOT": "run_warrior_scan_and_backtest.py"
 }
 
 from datetime import datetime
 
 async def monitor():
     print("👀 WATCHDOG: Monitoring Bot Processes...")
-    notifier.send_message("👀 WATCHDOG ONLINE", "Monitoring Swing & Sniper Bots.", color=0x999999)
+    notifier.send_message("👀 WATCHDOG ONLINE", "Monitoring Swing, Sniper, & Warrior Bots.", color=0x999999)
     
     # Store last status to avoid spamming
     last_status = {name: True for name in PROCESS_NAMES} # Assume up initially
@@ -63,7 +64,7 @@ async def monitor():
             # Heartbeat every hour
             if datetime.now().minute == 0 and datetime.now().second < 10:
                 # Basic check
-                 notifier.send_message("💓 SYSTEM HEARTBEAT", f"Watchdog Active. {len(current_pids)}/2 Bots Running.", color=0x333333)
+                 notifier.send_message("💓 SYSTEM HEARTBEAT", f"Watchdog Active. {len(current_pids)}/{len(PROCESS_NAMES)} Bots Running.", color=0x333333)
                  await asyncio.sleep(60) # Don't spam
 
             await asyncio.sleep(10) # Check every 10s
