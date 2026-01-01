@@ -1,6 +1,9 @@
 from typing import List, Optional, Dict
 from strategy_engine.models import Candidate, Section, Direction, TradePlan, Scores, Compliance
+from strategy_engine.models import Candidate, Section, Direction, TradePlan, Scores, Compliance
 from configs.settings import settings
+from strategy_engine.ema_strategy import EMA3Strategy
+
 
 class SwingAnalysis:
     """
@@ -143,7 +146,10 @@ class SwingSetup_20_50:
 
 class SwingStrategyEngine:
     def __init__(self):
-        self.setups = [SwingSetup_20_50()]
+        self.setups = [
+            SwingSetup_20_50(),
+            EMA3Strategy() # Trend Bot Integration
+        ]
 
     def scan(self, symbols: List[str], market_data: Dict[str, dict] = None) -> List[Candidate]:
         candidates = []

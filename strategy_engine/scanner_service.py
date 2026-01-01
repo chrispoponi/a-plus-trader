@@ -18,6 +18,8 @@ from strategy_engine.indicators.breakout_engine import BreakoutEngine
 from strategy_engine.data_loader import data_loader
 from strategy_engine.market_hunter import MarketHunter
 from strategy_engine.warrior_strategy import WarriorStrategy
+from strategy_engine.sykes_strategies import FirstGreenDayStrategy, MorningPanicStrategy
+from strategy_engine.one_box_strategy import OneBoxStrategy
 
 class ScannerService:
     def __init__(self):
@@ -25,6 +27,9 @@ class ScannerService:
         self.options_engine = OptionsEngine()
         self.day_engine = DayTradeEngine()
         self.warrior_engine = WarriorStrategy() # New
+        self.fgd_engine = FirstGreenDayStrategy()
+        self.mpdb_engine = MorningPanicStrategy()
+        self.one_box_engine = OneBoxStrategy()
         self.vdubus_engine = VdubusEngine()
         self.breakout_engine = BreakoutEngine()
         self.hunter = MarketHunter()
@@ -78,6 +83,106 @@ class ScannerService:
                 print(f"Error parsing CSV {csv_path}: {e}")
         
         return list(symbols)
+
+    async def _run_sykes_scan(self) -> List[Candidate]:
+        """
+        Scans for Tim Sykes Setups (FGD/MPDB) on Small Caps.
+        1. Fetch Snapshots of potential small caps.
+        2. Filter for Gainers (FGD) and Panic Losers (MPDB).
+        3. Fetch History and Run Strategies.
+        """
+        try:
+             print("🔎 SYKES SCAN: Hunting Penny Moves...")
+             
+             # Reuse Connection
+             from alpaca_trade_api.rest import REST
+             api = REST(settings.APCA_API_KEY_ID, settings.APCA_API_SECRET_KEY, base_url=settings.APCA_API_BASE_URL)
+             
+             # 1. Get Universe (NASDAQ/AMEX Small Caps ideally)
+             # We just get all tradable for now to be safe, filtering later
+             assets = api.list_assets(status='active', asset_class='us_equity')
+             # Filter logic: Focus on Exchanges known for pennies or just all
+             symbols = [a.symbol for a in assets if a.exchange in ['NASDAQ', 'NYSE', 'AMEX'] and a.tradable]
+             
+             # 2. Snapshot & Filter
+             chunk_size = 1000
+             candidates_FGD = []
+             candidates_MPDB = []
+             
+             # Limiter: Scan first 2000 or full? 
+             # Full scan takes time. Let's do 3000 to catch more.
+             scan_limit = 3000 
+             
+             for i in range(0, min(len(symbols), scan_limit), chunk_size):
+                  chunk = symbols[i:i+chunk_size]
+                  try:
+                      snaps = api.get_snapshots(chunk)
+                      for sym, snap in snaps.items():
+                          if not snap.daily_bar: continue
+                          p = snap.daily_bar.c
+                          
+                          # SYKES FILTER: Price < $25
+                          if p > 25.0: continue
+                          if p < 0.50: continue # Garbage
+                          
+                          prev = snap.prev_daily_bar.c
+                          if not prev: continue
+                          change = (p - prev) / prev
+                          
+                          # FGD POTENTIAL: Green > 3%
+                          if change >= 0.03:
+                               candidates_FGD.append(sym)
+                               
+                          # MPDB POTENTIAL: Red < -10% (Panic check)
+                          if change <= -0.10:
+                               candidates_MPDB.append(sym)
+                               
+                  except: pass
+             
+             print(f"SYKES: Found {len(candidates_FGD)} FGD Candidates, {len(candidates_MPDB)} Panic Candidates.")
+             
+             results = []
+             
+             # 3. Analyze FGD (Needs Daily History)
+             if candidates_FGD:
+                 # Batch Fetch Daily
+                 # We reuse data_loader logic or direct fetch
+                 # Direct fetch for speed here
+                 for sym in candidates_FGD[:20]: # Limit processing
+                      try:
+                          bars = api.get_bars(sym, "1Day", limit=60).df
+                          if bars.empty: continue
+                          
+                          # Feature Dict
+                          f_dict = {"df": bars, "current_date": bars.index[-1]}
+                          cand = self.fgd_engine.analyze(sym, f_dict)
+                          if cand: results.append(cand)
+                      except: pass
+
+             # 4. Analyze MPDB (Needs Intraday)
+             if candidates_MPDB:
+                  for sym in candidates_MPDB[:20]:
+                       try:
+                           bars = api.get_bars(sym, "5Min", limit=100).df
+                           if bars.empty: continue
+                           
+                           # Also need Daily for "Runner" check
+                           daily_bars = api.get_bars(sym, "1Day", limit=20).df
+                           
+                           f_dict = {
+                               "intraday_df": bars, 
+                               "df": daily_bars,
+                               "current_date": bars.index[-1]
+                           }
+                           cand = self.mpdb_engine.analyze(sym, f_dict)
+                           if cand: results.append(cand)
+                       except: pass
+
+             return results
+
+        except Exception as e:
+            print(f"Sykes Scan Error: {e}")
+            return []
 
     async def _run_warrior_scan(self) -> List[Candidate]:
         """
@@ -144,6 +249,63 @@ class ScannerService:
 
         except Exception as e:
             print(f"Warrior Scan Error: {e}")
+            return []
+
+    def run_sniper_scan(self, symbols: List[str]) -> List[Candidate]:
+        """
+        Fast Scan for Sniper Bot (High Frequency).
+        Runs One Box Strategy on 1-Minute Data.
+        """
+        try:
+             # Fetch Data (1Min, last 100 bars)
+             # Use data_loader's light fetch
+             from strategy_engine.data_loader import data_loader
+             from datetime import datetime
+             
+             # Map symbols to Data
+             # fetch_intraday_snapshot defaults to 5Min, need 1Min
+             # Since that method is hardcoded, let's just use API direct for speed/flexibility
+             # or update data_loader. Let's use direct API here to ensure 1Min.
+             from alpaca_trade_api.rest import REST
+             api = REST(settings.APCA_API_KEY_ID, settings.APCA_API_SECRET_KEY, base_url=settings.APCA_API_BASE_URL)
+             
+             if not symbols: return []
+             
+             # Fetch 1Min Bars
+             # Getting last 20 mins is enough
+             try:
+                 bars = api.get_bars(symbols, "1Min", limit=50).df
+             except: return []
+             
+             results = []
+             if bars.empty: return []
+             
+             # Process
+             unique_syms = bars.index.get_level_values(0).unique() if isinstance(bars.index, pd.MultiIndex) else bars['symbol'].unique()
+
+             for sym in unique_syms:
+                  try:
+                      if isinstance(bars.index, pd.MultiIndex):
+                          df = bars.xs(sym).copy()
+                      else:
+                          df = bars[bars['symbol'] == sym].copy()
+                      
+                      # Analyze One Box
+                      f_dict = {"intraday_df": df}
+                      cand = self.one_box_engine.analyze(sym, f_dict)
+                      
+                      if cand:
+                          results.append(cand)
+                  except: pass
+                  
+             # Sort by Profit Potential (User Request: "Most Profitable First")
+             # Proxy: Candidates with higher score or just first come?
+             results.sort(key=lambda x: x.scores.overall_rank_score, reverse=True)
+             
+             return results
+             
+        except Exception as e:
+            print(f"Sniper Scan Error: {e}")
             return []
 
     async def run_scan(self) -> Dict[str, List[Candidate]]:
@@ -213,12 +375,28 @@ class ScannerService:
             warrior_raw = []
             if allow_day: # Warrior is a day strategy
                  print("DEBUG: Running Warrior Scan...")
+            # WARRIOR SCAN (Parallel or Sequential)
+            warrior_raw = []
+            if allow_day: # Warrior is a day strategy
+                 print("DEBUG: Running Warrior Scan...")
                  warrior_raw = await self._run_warrior_scan()
+            
+            # SYKES SCAN
+            sykes_raw = []
+            if allow_day or allow_swing: # FGD is Swing, MPDB is Day
+                 sykes_raw = await self._run_sykes_scan()
 
             # --- FINAL ASSEMBLY ---
             swing_final = raw_swing 
             options_final = raw_options
             day_final = raw_day + warrior_raw # Merge Day & Warrior
+            
+            # Route Sykes Results
+            for c in sykes_raw:
+                if c.section == Section.SWING:
+                    swing_final.append(c)
+                else:
+                    day_final.append(c)
  
 
             # (No need for extra sorting here as Lists are short, but we can verify)

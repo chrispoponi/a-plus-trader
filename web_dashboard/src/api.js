@@ -39,9 +39,7 @@ export const api = {
     },
     uploadFile: async (endpoint, formData) => {
         try {
-            const res = await axiosInstance.post(`/upload/${endpoint}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            const res = await axiosInstance.post(`/upload/${endpoint}`, formData);
             return res.data;
         } catch (error) {
             console.error(`Upload to ${endpoint} Failed`, error);

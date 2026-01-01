@@ -97,6 +97,8 @@ class DataLoader:
                         continue 
 
                     processed_data = self._calculate_technicals(sym_data)
+                    processed_data['df'] = sym_data # Attach Daily DF for strategies needing history
+
                     
                     # Attach Intraday DF
                     processed_data['intraday_df'] = intra_data
@@ -164,7 +166,8 @@ class DataLoader:
             "candle_pattern": "hammer" if is_hammer else "normal",
             "volume_dry_up": bool(vol_dry_up),
             # Helpers for logic
-            "prev_close": float(prev['close'])
+            "prev_close": float(prev['close']),
+            "current_date": curr.name
         }
 
         return results

@@ -15,6 +15,8 @@ from strategy_engine.congress_strategy import CongressStrategy
 from strategy_engine.buffett_strategy import BuffettStrategy
 from strategy_engine.rsi_bands_strategy import RSIBandsStrategy
 from strategy_engine.warrior_strategy import WarriorStrategy
+from strategy_engine.ema_strategy import EMA3Strategy
+from strategy_engine.sykes_strategies import FirstGreenDayStrategy, MorningPanicStrategy
 from strategy_engine.models import Direction
 import warnings
 
@@ -60,6 +62,12 @@ class BacktestEngine:
             self.setup = RSIBandsStrategy()
         elif strategy_type == 'WARRIOR':
             self.setup = WarriorStrategy()
+        elif strategy_type == 'EMA3':
+             self.setup = EMA3Strategy()
+        elif strategy_type == 'FGD':
+             self.setup = FirstGreenDayStrategy()
+        elif strategy_type == 'MPDB':
+             self.setup = MorningPanicStrategy()
             
         self.initial_capital = 100000.0
         self.cash = self.initial_capital
@@ -264,7 +272,7 @@ class BacktestEngine:
         print(f"\n--- 🦅 HARMONIC EAGLE BACKTESTER ---\nStrategy: {self.strategy_type}\nPeriod: Last {days} Days\nCapital: ${self.initial_capital:,.2f}\n")
         # Select Timeframe
         tf_str = '1Day'
-        if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS' or self.strategy_type == 'KELLOG' or self.strategy_type == 'WARRIOR':
+        if self.strategy_type in ['DAY', 'SNIPER_OPTIONS', 'KELLOG', 'WARRIOR', 'MPDB']:
              tf_str = '5Min'
         
         # CONGRESS and BUFFETT use 1Day default
@@ -504,7 +512,7 @@ class BacktestEngine:
             # Map index/special fields if needed
             # (row.to_dict handles close, high, low, ema20, rsi2, etc automatically)
             
-            if self.strategy_type == 'DAY' or self.strategy_type == 'SNIPER_OPTIONS' or self.strategy_type == 'KELLOG' or self.strategy_type == 'WARRIOR':
+            if self.strategy_type in ['DAY', 'SNIPER_OPTIONS', 'KELLOG', 'WARRIOR', 'MPDB']:
                  idx_pos = df.index.get_loc(current_time)
                  if isinstance(idx_pos, slice): idx_pos = idx_pos.start
                  if idx_pos < 50: continue

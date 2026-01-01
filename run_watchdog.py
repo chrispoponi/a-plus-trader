@@ -11,16 +11,15 @@ sys.path.append(os.getcwd())
 from utils.notifications import notifier
 
 PROCESS_NAMES = {
-    "SWING BOT": "executor_service/main.py",
-    "SNIPER BOT": "run_sniper_bot.py",
-    "WARRIOR BOT": "run_warrior_scan_and_backtest.py"
+    "CORE SYSTEM (Swing/Trend/Sykes/Warrior)": "executor_service/main.py",
+    "SNIPER BOT": "run_sniper_bot.py"
 }
 
 from datetime import datetime
 
 async def monitor():
     print("👀 WATCHDOG: Monitoring Bot Processes...")
-    notifier.send_message("👀 WATCHDOG ONLINE", "Monitoring Swing, Sniper, & Warrior Bots.", color=0x999999)
+    notifier.send_message("👀 WATCHDOG ONLINE", "Monitoring Swing, Trend, Sykes, Sniper, & Warrior Bots.", color=0x999999)
     
     # Store last status to avoid spamming
     last_status = {name: True for name in PROCESS_NAMES} # Assume up initially

@@ -36,27 +36,42 @@ async def scheduled_market_scan(scan_name: str):
     options = results.get("Options", [])
     days = results.get("Day Trade", [])
     
-    core_swings = [c for c in swings if c.trade_plan.is_core_trade]
+    all_candidates = swings + options + days
+    
+    # GROUP BY STRATEGY
+    from collections import defaultdict
+    strat_counts = defaultdict(list)
+    
+    for c in all_candidates:
+        # Example setup_name: "FGD (First Green Day)" or "3EMA Trend Breakout"
+        # We group by the first word or full name
+        strat_counts[c.setup_name].append(c)
     
     msg_lines = [f"**{scan_name} Report**"]
     
-    if core_swings:
-        msg_lines.append(f"🟢 **CORE SWINGS DETECTED**: {len(core_swings)}")
-        for c in core_swings:
-            # AUTO EXECUTE TRADES handled by ScannerService internally.
-            # We just report status here.
-            
-            # TODO: We could check order status from executor to report success?
-            # For now, assume Scanner handles it.
-            
-            msg_lines.append(f"- {c.symbol}: Score {c.scores.overall_rank_score} | (Auto-Handling)")
+    if not all_candidates:
+        msg_lines.append("💤 No Signals Found.")
     else:
-        msg_lines.append("No Core Swings.")
-        
-    msg_lines.append(f"Day Trades: {len(days)} | Options: {len(options)}")
-    
+        for setup, c_list in strat_counts.items():
+            # Icon mapping
+            icon = "🔹"
+            if "FGD" in setup: icon = "🚀"
+            elif "Panic" in setup: icon = "🩸"
+            elif "3EMA" in setup: icon = "🌊"
+            elif "Trend" in setup: icon = "🦅"
+            elif "Options" in setup: icon = "🎯"
+            elif "Warrior" in setup: icon = "⚔️"
+            
+            msg_lines.append(f"{icon} **{setup}**: {len(c_list)}")
+            
+            # List Top 3 symbols
+            for c in c_list[:3]:
+                 msg_lines.append(f"   • {c.symbol} (${c.trade_plan.entry:.2f})")
+            if len(c_list) > 3:
+                 msg_lines.append(f"   • ... and {len(c_list)-3} more")
+
     # Send
-    color = 0x00ff00 if core_swings else 0xcccccc
+    color = 0x00ff00 if all_candidates else 0xcccccc
     notifier.send_message(f"📡 Bot Scan: {scan_name}", "\n".join(msg_lines), color)
 
 def start_scheduler():

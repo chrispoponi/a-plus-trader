@@ -49,16 +49,28 @@ async def run_sniper_bot():
                 # Logic: Buy Closest Strike ATM. Expiry: Current Week.
                 price = c.trade_plan.entry
                 strike = int(round(price))
+                # Construct Output
                 contract_type = "CALL" if c.direction.value == "LONG" else "PUT"
+                strike = int(round(price))
+                
+                # Check setup name to customize logic
+                bot_name = "🔫 SNIPER BOT"
+                logic_desc = "Momentum Breakout. Hold < 1 Hour."
+                
+                if "One Box" in c.setup_name:
+                    bot_name = "📦 ONE BOX BOT"
+                    logic_desc = "1M Scalp Pattern. Quick TP."
+                    # One Box is stock trade or option? Can be either. Assuming Option for now as per Sniper context.
                 
                 msg = (
-                    f"🚨 **SNIPER SIGNAL DETECTED** 🚨\n"
+                    f"🚨 **{bot_name} SIGNAL** 🚨\n"
                     f"Symbol: **{c.symbol}** (${price:.2f})\n"
                     f"Setup: {c.setup_name}\n"
+                    f"Score: {c.scores.overall_rank_score}/100\n"
                     f"Thesis: {c.thesis}\n\n"
                     f"🎯 **ACTION REQUIRED**:\n"
                     f"Buy Weekly **{contract_type}** Strike **${strike}**\n"
-                    f"Logic: Momentum Breakout. Hold < 1 Hour."
+                    f"Logic: {logic_desc}"
                 )
                 
                 print(msg)
@@ -69,8 +81,8 @@ async def run_sniper_bot():
             if not candidates:
                 print("No targets found.")
                 
-            # Sleep 5 Minutes (Match Bar Size)
-            await asyncio.sleep(300)
+            # Sleep 1 Minute (Match One Box 1M bars)
+            await asyncio.sleep(60)
             
         except KeyboardInterrupt:
             print("Sniper Bot stopping...")
