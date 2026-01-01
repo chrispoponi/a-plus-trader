@@ -226,23 +226,16 @@ async def get_alpaca_positions():
     try:
         from executor_service.order_executor import executor
         if not executor.api:
-            return [{
-                "symbol": "API_DISCONNECTED",
-                "qty": 0,
-                "side": "ERR",
-                "market_value": 0,
-                "cost_basis": 0,
-                "unrealized_pl": 0,
-                "unrealized_plpc": 0,
-                "current_price": 0
-            }]
+            return []
         
-        # FIX: 'REST' object has no attribute 'get_all_positions'. Use 'list_positions'.
+        # LIVE FETCH
         raw_positions = executor.api.list_positions()
+        print(f"DEBUG: Fetched {len(raw_positions)} positions from Alpaca.")
+        
         data = []
         for p in raw_positions:
             try:
-                # Super Safe Extraction
+                # Safe Extraction
                 s = str(p.symbol)
                 q = float(p.qty) if p.qty is not None else 0.0
                 mv = float(p.market_value) if p.market_value is not None else 0.0
@@ -251,7 +244,7 @@ async def get_alpaca_positions():
                 uplpc = float(p.unrealized_plpc) if p.unrealized_plpc is not None else 0.0
                 cp = float(p.current_price) if p.current_price is not None else 0.0
                 
-                # Side
+                # Side Normalization
                 side_val = "long"
                 if hasattr(p, 'side'):
                      if hasattr(p.side, 'value'): side_val = str(p.side.value)
@@ -268,33 +261,13 @@ async def get_alpaca_positions():
                     "current_price": cp
                 })
             except Exception as ser_err:
-                data.append({
-                    "symbol": f"ERR: {str(ser_err)[:10]}",
-                    "qty": 0,
-                    "side": "ERR",
-                    "market_value": 0,
-                    "cost_basis": 0,
-                    "unrealized_pl": 0,
-                    "unrealized_plpc": 0,
-                    "current_price": 0
-                })
+                print(f"Error parsing position {p.symbol}: {ser_err}")
                 continue 
-                
-        return data 
                 
         return data
     except Exception as e:
         print(f"Error fetching positions: {e}")
-        return [{
-                "symbol": f"ERROR: {str(e)[:15]}",
-                "qty": 0,
-                "side": "ERR",
-                "market_value": 0,
-                "cost_basis": 0,
-                "unrealized_pl": 0,
-                "unrealized_plpc": 0,
-                "current_price": 0
-            }]
+        return []
 
 from utils.notifications import notifier
 from executor_service.scheduler import start_scheduler
