@@ -89,5 +89,14 @@ export const api = {
             console.error("Liquidation Failed", error);
             throw error;
         }
+    },
+    closePosition: async (symbol) => {
+        try {
+            const res = await axiosInstance.post(`/api/alpaca/close_position`, { symbol });
+            return res.data;
+        } catch (error) {
+            console.error("Close Position Failed", error);
+            throw error;
+        }
     }
 };

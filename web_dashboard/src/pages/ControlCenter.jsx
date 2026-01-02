@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Play, Activity, TrendingUp, ShieldCheck } from 'lucide-react';
+import { Play, Activity, TrendingUp, ShieldCheck, X } from 'lucide-react';
 import PerformanceChart from '../components/PerformanceChart';
 
 const ControlCenter = () => {
@@ -92,6 +92,7 @@ const ControlCenter = () => {
                                 <th className="px-6 py-3 text-right">Cost Basis</th>
                                 <th className="px-6 py-3 text-right">Unrealized P&L</th>
                                 <th className="px-6 py-3 text-right">% Return</th>
+                                <th className="px-6 py-3 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700">
@@ -109,6 +110,21 @@ const ControlCenter = () => {
                                         </td>
                                         <td className={`px-6 py-4 font-bold text-right ${p.unrealized_plpc >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                             {(p.unrealized_plpc * 100).toFixed(2)}%
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button
+                                                onClick={async () => {
+                                                    if (confirm(`Market Sell ${p.symbol}?`)) {
+                                                        await api.closePosition(p.symbol);
+                                                        // Optimistic Update
+                                                        setPositions(prev => prev.filter(pos => pos.symbol !== p.symbol));
+                                                    }
+                                                }}
+                                                className="bg-red-900/40 hover:bg-red-600 text-red-400 hover:text-white p-2 rounded-full transition-colors"
+                                                title="Close Position"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))

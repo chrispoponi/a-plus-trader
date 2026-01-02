@@ -269,6 +269,33 @@ async def get_alpaca_positions():
         print(f"Error fetching positions: {e}")
         return []
 
+@app.post("/api/alpaca/close_position")
+async def close_single_position(payload: dict):
+    """
+    Manually closes a single position by symbol.
+    Expects payload: {"symbol": "AAPL"}
+    """
+    symbol = payload.get("symbol")
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol required")
+        
+    try:
+        from executor_service.order_executor import executor
+        if not executor.api:
+            raise HTTPException(status_code=503, detail="Alpaca API disconnected")
+            
+        print(f"MANUAL CLOSE REQUEST: {symbol}")
+        # Market Order to Close
+        executor.api.close_position(symbol)
+        
+        from utils.notifications import notifier
+        notifier.send_message("⚠️ MANUAL CLOSE", f"User manually closed {symbol} via Dashboard.", color=0xff7700)
+        
+        return {"status": "success", "message": f"Closed {symbol}"}
+    except Exception as e:
+        print(f"Error closing {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 from utils.notifications import notifier
 from executor_service.scheduler import start_scheduler
 
