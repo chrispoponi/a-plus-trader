@@ -41,23 +41,60 @@ class OptionsEngine:
         # Mock Option Chain Analysis (Simulating the Greeks)
         # Real logic would query chain, find deltas 0.20/0.05
         
+        # Determine Strikes dynamically
+        strikes = []
+        upper_bb = data.get('upper_bb', close * 1.05)
+        lower_bb = data.get('lower_bb', close * 0.95)
+        
         if strategy == "Iron Condor":
-            # Short Put 440, Long Put 430
-            # Short Call 480, Long Call 490
-            credit = 2.10
-            width = 10.0
-            pop = 68.0 # Condors usually have slightly lower POP than singular spreads, but higher credit
-            if pop < 65.0: return None 
+            # SPECIFIC LOGIC FOR INDICES (SPY, QQQ, IWM) -> 1DTE INCOME
+            is_index = symbol in ["SPY", "QQQ", "IWM", "SPX"]
+            
+            if is_index:
+                # 1DTE LOGIC
+                # Use ATR for move. If missing, approx 1.5%
+                atr = data.get('atr', close * 0.015) 
+                
+                short_put = round(close - (1.5 * atr), 1)
+                long_put = round(short_put - 2.0, 1) # $2 wide
+                
+                short_call = round(close + (1.5 * atr), 1)
+                long_call = round(short_call + 2.0, 1)
+                
+                strikes = [long_put, short_put, short_call, long_call]
+                credit = 0.50 # Target $50 per contract
+                width = 2.0
+                pop = 85.0
+                dte = 1
+            else:
+                # STANDARD CONDOR (Swing)
+                short_put = round(lower_bb, 1)
+                long_put = round(short_put * 0.95, 1)
+                short_call = round(upper_bb, 1)
+                long_call = round(short_call * 1.05, 1)
+                strikes = [long_put, short_put, short_call, long_call]
+                credit = round(close * 0.01, 2)
+                width = round(short_put - long_put, 2)
+                pop = 68.0
+                dte = 45
         else:
-            # If Bull Put Spread:
-            # Sell 450 Put, Buy 440 Put
-            credit = 1.50
-            width = 10.0
+            # SPREADS
+            dte = 45
+            if direction == Direction.LONG: 
+                short_put = round(lower_bb, 1)
+                long_put = round(short_put * 0.95, 1)
+                strikes = [long_put, short_put]
+            else: 
+                short_call = round(upper_bb, 1)
+                long_call = round(short_call * 1.05, 1)
+                strikes = [short_call, long_call]
+                
+            credit = round(close * 0.01, 2)
+            width = round(abs(strikes[0] - strikes[1]), 2)
             pop = 72.5
-            if pop < 70.0: return None
 
-        max_loss = (width - credit) * 100
-        max_gain = credit * 100
+        max_loss = round((width - credit) * 100, 2)
+        max_gain = round(credit * 100, 2)
         
         return Candidate(
             section=Section.OPTIONS,
@@ -74,9 +111,9 @@ class OptionsEngine:
             ),
             options_details=OptionsDetails(
                 strategy_type=strategy,
-                strikes=[440, 430, 480, 490] if strategy == "Iron Condor" else [450, 440],
-                expiration_date="2024-02-16",
-                dte=45,
+                strikes=strikes,
+                expiration_date="1DTE" if dte==1 else "45DTE",
+                dte=dte,
                 pop_estimate=pop,
                 max_loss=max_loss,
                 max_gain=max_gain,

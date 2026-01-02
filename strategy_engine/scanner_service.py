@@ -20,10 +20,12 @@ from strategy_engine.market_hunter import MarketHunter
 from strategy_engine.warrior_strategy import WarriorStrategy
 from strategy_engine.sykes_strategies import FirstGreenDayStrategy, MorningPanicStrategy
 from strategy_engine.one_box_strategy import OneBoxStrategy
+from strategy_engine.ema_strategy import EMA3Strategy
 
 class ScannerService:
     def __init__(self):
         self.swing_engine = SwingStrategyEngine()
+        self.ema_engine = EMA3Strategy()
         self.options_engine = OptionsEngine()
         self.day_engine = DayTradeEngine()
         self.warrior_engine = WarriorStrategy() # New
@@ -352,10 +354,24 @@ class ScannerService:
 
             # 4. EXECUTE ENGINES ON ELITE LISTS
             
-            # SWING
+            # SWING (Vdub Reversal + EMA3 Trend)
             if allow_swing: 
-                # Only scan the Elite 3 for Setup Details
+                # 1. Standard Reversal Scan (Vdub)
                 raw_swing = self.swing_engine.scan(top_swing_syms, market_data)
+                
+                # 2. EMA Trend Scan (The "Trend Bot" Logic)
+                print("DEBUG: Running EMA3 Trend Scan...")
+                for sym in top_swing_syms:
+                    if sym not in market_data: continue
+                    # Use full feature dict from market_data
+                    f_dict = market_data[sym]
+                    
+                    try:
+                        trend_cand = self.ema_engine.analyze(sym, f_dict)
+                        if trend_cand:
+                             raw_swing.append(trend_cand)
+                    except Exception as e:
+                        print(f"EMA3 Error {sym}: {e}")
             else:
                 print(f"Skipping Swing Scan: {reason_swing}")
 
