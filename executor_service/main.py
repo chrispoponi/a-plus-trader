@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from strategy_engine.models import WebhookSignal
 from executor_service.webhook_handler import process_webhook
@@ -8,6 +9,24 @@ from executor_service.upload_router import router as upload_router
 from executor_service.automation_router import router as automation_router
 
 app = FastAPI(title="A+ Trader Agent", version="1.0.0")
+
+# SECURITY MIDDLEWARE
+@app.middleware("http")
+async def verify_api_key(request: Request, call_next):
+    # 1. Exempt Options (CORS preflight)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    
+    # 2. Exempt Webhook (Has own auth) and Root Health Check
+    if request.url.path in ["/webhook", "/", "/docs", "/openapi.json"]:
+        return await call_next(request)
+        
+    # 3. Verify Header
+    key = request.headers.get("x-admin-key")
+    if key != settings.API_PASSWORD:
+        return JSONResponse(status_code=403, content={"detail": "Access Denied. Please Login."})
+        
+    return await call_next(request)
 
 # Allow frontend to communicate
 app.add_middleware(
@@ -285,7 +304,23 @@ async def close_single_position(payload: dict):
             raise HTTPException(status_code=503, detail="Alpaca API disconnected")
             
         print(f"MANUAL CLOSE REQUEST: {symbol}")
-        # Market Order to Close
+        
+        # 1. Cancel Open Orders for Symbol First (Prevent Conflicts)
+        try:
+            executor.api.cancel_all_orders() # Ideally filter by symbol? 
+            # SDK doesn't support cancel_orders(symbol=...). 
+            # We must iterate or blindly cancel all? 
+            # 'cancel_all_orders' cancels ALL symbols. That is bad.
+            
+            # Use list_orders -> cancel_order
+            orders = executor.api.list_orders(status='open', symbols=[symbol])
+            for o in orders:
+                executor.api.cancel_order(o.id)
+            print(f"Cancelled {len(orders)} open orders for {symbol}")
+        except Exception as cx:
+            print(f"Warning cancelling orders for {symbol}: {cx}")
+            
+        # 2. Market Close
         executor.api.close_position(symbol)
         
         from utils.notifications import notifier

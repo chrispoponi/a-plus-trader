@@ -10,6 +10,15 @@ const axiosInstance = axios.create({
     timeout: 60000, // 60 seconds
 });
 
+// AUTO-INJECT PASSWORD
+axiosInstance.interceptors.request.use((config) => {
+    const token = localStorage.getItem('admin_key');
+    if (token) {
+        config.headers['x-admin-key'] = token;
+    }
+    return config;
+});
+
 export const api = {
     getHealth: async () => {
         try {

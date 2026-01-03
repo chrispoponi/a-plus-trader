@@ -8,7 +8,15 @@ import DataIngestPage from './pages/DataIngest';
 
 import ChartPage from './pages/ChartPage';
 
+import Login from './components/Login';
+
 function App() {
+  const [token, setToken] = React.useState(localStorage.getItem('admin_key'));
+
+  if (!token) {
+    return <Login onLogin={() => setToken(localStorage.getItem('admin_key'))} />;
+  }
+
   return (
     <BrowserRouter>
       <Layout>

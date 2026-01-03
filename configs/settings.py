@@ -14,6 +14,7 @@ class Settings:
     # Security
     WEBHOOK_TOKEN = os.getenv("WEBHOOK_TOKEN", "")
     SECRET_KEY = os.getenv("SECRET_KEY", "dev_secret")
+    API_PASSWORD = os.getenv("API_PASSWORD", "harmonic_eagle_2025")
 
     # Mode
     TRADING_MODE = TradingMode(os.getenv("TRADING_MODE", "PAPER").upper())
@@ -28,13 +29,13 @@ class Settings:
     APCA_API_BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 
     # Risk (Non-negotiable defaults from code if env missing, but env overrides)
-    # User specified: 0.75% risk per trade, 2% max daily loss
+    # User specified: 0.75% risk per trade, Uncapped Trades
     MAX_RISK_PER_TRADE_PERCENT = float(os.getenv("MAX_RISK_PER_TRADE_PERCENT", "0.75"))
-    CORE_RISK_PER_TRADE_PERCENT = float(os.getenv("CORE_RISK_PER_TRADE_PERCENT", "1.25"))
-    MAX_DAILY_LOSS_PERCENT = float(os.getenv("MAX_DAILY_LOSS_PERCENT", "2.0"))
-    MAX_OPEN_SWING_POSITIONS = int(os.getenv("MAX_OPEN_SWING_POSITIONS", "4"))
-    MAX_OPEN_DAY_POSITIONS = int(os.getenv("MAX_OPEN_DAY_POSITIONS", "2"))
-    MAX_PORTFOLIO_RISK_PERCENT = float(os.getenv("MAX_PORTFOLIO_RISK_PERCENT", "4.0"))
+    CORE_RISK_PER_TRADE_PERCENT = float(os.getenv("CORE_RISK_PER_TRADE_PERCENT", "0.75")) # Matched
+    MAX_DAILY_LOSS_PERCENT = float(os.getenv("MAX_DAILY_LOSS_PERCENT", "5.0"))
+    MAX_OPEN_SWING_POSITIONS = int(os.getenv("MAX_OPEN_SWING_POSITIONS", "100")) # Unlimited
+    MAX_OPEN_DAY_POSITIONS = int(os.getenv("MAX_OPEN_DAY_POSITIONS", "100"))   # Unlimited
+    MAX_PORTFOLIO_RISK_PERCENT = float(os.getenv("MAX_PORTFOLIO_RISK_PERCENT", "25.0"))
 
     # Signal
     MIN_WIN_PROBABILITY_ESTIMATE = float(os.getenv("MIN_WIN_PROBABILITY", "65.0"))
