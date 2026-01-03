@@ -38,6 +38,22 @@ async def scheduled_market_scan(scan_name: str):
     
     all_candidates = swings + options + days
     
+    # --- AUTO EXECUTION ---
+    from configs.settings import settings
+    if settings.AUTO_EXECUTION_ENABLED:
+        print(f"SCHEDULER: Auto-Execution Enabled. Processing {len(all_candidates)} candidates...")
+        for cand in all_candidates:
+            try:
+                # Check Compliance & Execute
+                # executor handles risk checks internally
+                res = executor.execute_trade(cand)
+                print(f"EXECUTION RESULT ({cand.symbol}): {res}")
+            except Exception as e:
+                print(f"Failed to execute {cand.symbol}: {e}")
+    else:
+        print("SCHEDULER: Auto-Execution DISABLED. Signaling only.")
+    # ----------------------
+    
     # GROUP BY STRATEGY
     from collections import defaultdict
     strat_counts = defaultdict(list)

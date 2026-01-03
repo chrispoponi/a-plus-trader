@@ -337,9 +337,21 @@ from utils.notifications import notifier
 from executor_service.scheduler import start_scheduler
 
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     start_scheduler()
-    notifier.send_message("🦅 SWING BOT: ONLINE", "System Initialized. API and Scheduler Active.", color=0x00ff00)
+    notifier.send_message("🦅 HARMONIC EAGLE: ONLINE", "System Active. Strategies: Swing, Trend, Day, Options, Warrior.", color=0x00ff00)
+    
+    # Internal Heartbeat Loop
+    import asyncio
+    async def heartbeat_loop():
+        while True:
+            await asyncio.sleep(3600) # 1 Hour
+            try:
+                # Basic self-check
+                notifier.send_message("💓 SYSTEM PULSE", "API is Active. Scheduler Running.", color=0x333333)
+            except: pass
+            
+    asyncio.create_task(heartbeat_loop())
 
 if __name__ == "__main__":
     import uvicorn
