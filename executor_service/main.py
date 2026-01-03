@@ -312,8 +312,10 @@ async def close_single_position(payload: dict):
             # We must iterate or blindly cancel all? 
             # 'cancel_all_orders' cancels ALL symbols. That is bad.
             
-            # Use list_orders -> cancel_order
-            orders = executor.api.list_orders(status='open', symbols=[symbol])
+            # Use list_orders -> filter locally (Safer for SDK compatibility)
+            all_orders = executor.api.list_orders(status='open')
+            orders = [o for o in all_orders if o.symbol == symbol]
+            
             for o in orders:
                 executor.api.cancel_order(o.id)
             print(f"Cancelled {len(orders)} open orders for {symbol}")

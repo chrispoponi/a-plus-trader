@@ -31,12 +31,18 @@ async def monitor():
             # CHECK VIA PGREP
             for human_name, script_name in PROCESS_NAMES.items():
                 try:
-                    # pgrep -f matches full command line
-                    result = subprocess.run(['pgrep', '-f', script_name], capture_output=True, text=True)
+                    # Generic check for python script
+                    cmd = ['pgrep', '-f', script_name]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    # Fallback for Uvicorn (Render/Heroku)
+                    if result.returncode != 0 and "main.py" in script_name:
+                        cmd = ['pgrep', '-f', 'uvicorn']
+                        result = subprocess.run(cmd, capture_output=True, text=True)
+                        
                     if result.returncode == 0:
                         # Process exists
                         pids = result.stdout.strip().split('\n')
-                        # Exclude self (watchdog) if needed, but script_name is specific
                         current_pids[human_name] = pids[0]
                 except Exception:
                     pass

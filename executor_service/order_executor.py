@@ -69,9 +69,10 @@ class OrderExecutor:
         try:
             # 1. Check Max Positions
             positions = self.api.list_positions()
-            # Dynamic Cap: Day (3) + Swing (3) = 6
-            if len(positions) >= 6:
-                return f"MAX_POSITIONS_REACHED ({len(positions)}/6)"
+            # Dynamic Cap from Settings
+            max_pos = settings.MAX_OPEN_SWING_POSITIONS + settings.MAX_OPEN_DAY_POSITIONS
+            if len(positions) >= max_pos:
+                return f"MAX_POSITIONS_REACHED ({len(positions)}/{max_pos})"
             
             # 2. Check Duplicates
             for pos in positions:
