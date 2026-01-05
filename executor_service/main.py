@@ -307,11 +307,6 @@ async def close_single_position(payload: dict):
         
         # 1. Cancel Open Orders for Symbol First (Prevent Conflicts)
         try:
-            executor.api.cancel_all_orders() # Ideally filter by symbol? 
-            # SDK doesn't support cancel_orders(symbol=...). 
-            # We must iterate or blindly cancel all? 
-            # 'cancel_all_orders' cancels ALL symbols. That is bad.
-            
             # Use list_orders -> filter locally (Safer for SDK compatibility)
             all_orders = executor.api.list_orders(status='open')
             orders = [o for o in all_orders if o.symbol == symbol]
