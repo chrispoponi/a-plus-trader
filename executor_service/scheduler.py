@@ -90,9 +90,49 @@ async def scheduled_market_scan(scan_name: str):
     color = 0x00ff00 if all_candidates else 0xcccccc
     notifier.send_message(f"📡 Bot Scan: {scan_name}", "\n".join(msg_lines), color)
 
+def check_trade_exits():
+    """
+    Polls the trade logger to see if any open trades have closed.
+    If so, sends a notification.
+    """
+    try:
+        from executor_service.trade_logger import trade_logger
+        # Returns list of dicts
+        closed_trades = trade_logger.update_closed_trades()
+        
+        if closed_trades:
+            print(f"SCHEDULER: Found {len(closed_trades)} closed trades.")
+            for t in closed_trades:
+                # Format Message
+                pnl = t.get('pnl_dollars', 0)
+                pct = t.get('pnl_percent', 0) * 100
+                symbol = t.get('symbol')
+                
+                emoji = "🟢" if pnl >= 0 else "🔴"
+                title = f"{emoji} TRADE CLOSED: {symbol}"
+                
+                msg = (
+                    f"**Result:** ${pnl:.2f} ({pct:.2f}%)\n"
+                    f"**Exit Price:** ${t.get('exit_price', 0):.2f}\n"
+                    f"**Hold Time:** {t.get('holding_minutes', 0):.1f} mins"
+                )
+                
+                color = 0x00ff00 if pnl >= 0 else 0xff0000
+                notifier.send_message(title, msg, color)
+    except Exception as e:
+        print(f"Error checking exits: {e}")
+
 def start_scheduler():
     # New York Time
     ny_tz = pytz.timezone("America/New_York")
+    from apscheduler.triggers.interval import IntervalTrigger
+    
+    # 0. Exit Poller (Every 5 mins)
+    scheduler.add_job(
+        check_trade_exits,
+        IntervalTrigger(minutes=5),
+        id="exit_poller"
+    )
     
     # 1. Morning Prep (9:45 AM)
     scheduler.add_job(

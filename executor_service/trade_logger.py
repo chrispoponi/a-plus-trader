@@ -207,6 +207,17 @@ class TradeLogger:
             print(f"📝 UPDATED {updated_count} CLOSED TRADES.")
             # Trigger Stats Re-Calc
             self.generate_analytics()
+            
+            # Return list for notifications
+            closed_list = []
+            # We iterate the indices we processed (which were in open_trades)
+            # and check if they are now CLOSED in the master journal
+            for idx in open_trades.index:
+                if journal.loc[idx, "status"] == "CLOSED":
+                    closed_list.append(journal.loc[idx].to_dict())
+            return closed_list
+            
+        return []
 
     def generate_analytics(self) -> dict:
         """
