@@ -33,40 +33,55 @@ const ControlCenter = () => {
 
             {/* Status Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-gray-400 text-sm font-medium">SYSTEM STATUS</h3>
-                        <Activity className={`w-5 h-5 ${status?.status === 'system_active' ? 'text-pro-success' : 'text-pro-danger'}`} />
+                {/* 1. DAILY P/L */}
+                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <TrendingUp className="w-16 h-16" />
                     </div>
-                    <p className="text-2xl font-bold capitalize">{status?.status?.replace('_', ' ') || 'Offline'}</p>
-                </div>
-
-                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-gray-400 text-sm font-medium">MODE</h3>
-                        <ShieldCheck className="w-5 h-5 text-pro-warning" />
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-gray-400 text-sm font-medium">DAILY P/L</h3>
+                        <span className={`text-xs font-bold px-2 py-1 rounded ${status?.daily_pnl >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                            {status?.daily_pct ? `${status.daily_pct > 0 ? '+' : ''}${status.daily_pct.toFixed(2)}%` : '0.00%'}
+                        </span>
                     </div>
-                    <p className="text-2xl font-bold tracking-wider">{status?.mode || '---'}</p>
-                </div>
-
-                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-gray-400 text-sm font-medium">WIN RATE</h3>
-                        <TrendingUp className="w-5 h-5 text-pro-accent" />
-                    </div>
-                    <p className="text-2xl font-bold text-white">
-                        {stats?.win_rate ? (stats.win_rate * 100).toFixed(1) + '%' : 'N/A'}
+                    <p className={`text-3xl font-bold ${status?.daily_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {status?.daily_pnl ? `${status.daily_pnl > 0 ? '+' : ''}$${Math.abs(status.daily_pnl).toFixed(2)}` : '$0.00'}
                     </p>
                 </div>
 
+                {/* 2. EQUITY */}
                 <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-gray-400 text-sm font-medium">NET PnL</h3>
-                        <span className="text-xs text-gray-500">REALIZED</span>
+                        <h3 className="text-gray-400 text-sm font-medium">TOTAL EQUITY</h3>
+                        <ShieldCheck className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <p className="text-2xl font-bold text-white tracking-wider">
+                        {status?.equity ? `$${status.equity.toLocaleString()}` : '---'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Mode: {status?.mode || 'PAPER'}</p>
+                </div>
+
+                {/* 3. TOTAL REALIZED PnL */}
+                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-gray-400 text-sm font-medium">TOTAL REALIZED</h3>
+                        <span className="text-xs text-gray-500">ALL TIME</span>
                     </div>
                     <p className={`text-2xl font-bold ${stats?.total_pnl >= 0 ? 'text-pro-success' : 'text-pro-danger'}`}>
                         {stats?.total_pnl ? `$${stats.total_pnl.toFixed(2)}` : '$0.00'}
                     </p>
+                </div>
+
+                {/* 4. WIN RATE */}
+                <div className="bg-pro-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-gray-400 text-sm font-medium">WIN RATE</h3>
+                        <Activity className={`w-5 h-5 ${status?.status === 'system_active' ? 'text-pro-success' : 'text-gray-500'}`} />
+                    </div>
+                    <p className="text-2xl font-bold text-white">
+                        {stats?.win_rate ? (stats.win_rate * 100).toFixed(1) + '%' : 'N/A'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{status?.status?.replace('_', ' ') || 'Offline'}</p>
                 </div>
             </div>
 

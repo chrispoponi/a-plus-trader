@@ -136,6 +136,23 @@ class OrderExecutor:
                 type_order = 'market'
                 tif = 'day'
             
+            # --- SAFETY SEAL: VALIDATE BRACKET ---
+            sl = plan.stop_loss
+            tp = plan.take_profit
+            en = plan.entry
+            
+            if not sl or not tp:
+                return f"REJECTED_SAFETY: Missing Legs (Stop: {sl}, Target: {tp})"
+                
+            # Logical Validation
+            if side == 'buy':
+                if sl >= en: return f"REJECTED_SAFETY: Long Stop ({sl}) >= Entry ({en})"
+                if tp <= en: return f"REJECTED_SAFETY: Long Target ({tp}) <= Entry ({en})"
+            else: # sell (short)
+                if sl <= en: return f"REJECTED_SAFETY: Short Stop ({sl}) <= Entry ({en})"
+                if tp >= en: return f"REJECTED_SAFETY: Short Target ({tp}) >= Entry ({en})"
+            # -------------------------------------
+
             # Construct Args
             order_args = {
                 "symbol": symbol,
@@ -144,8 +161,8 @@ class OrderExecutor:
                 "type": type_order,
                 "time_in_force": tif,
                 "order_class": 'bracket',
-                "take_profit": {'limit_price': plan.take_profit},
-                "stop_loss": {'stop_price': plan.stop_loss}
+                "take_profit": {'limit_price': tp},
+                "stop_loss": {'stop_price': sl}
             }
             
             if limit_price:

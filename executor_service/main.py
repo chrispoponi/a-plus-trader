@@ -45,9 +45,19 @@ def health_check():
     from executor_service.order_executor import executor
     
     conn = "connected" if executor.api else "disconnected"
+    daily_pnl = 0.0
+    daily_pct = 0.0
+    equity = 0.0
+    
     if executor.api:
         try:
             executor.api.get_clock()
+            acct = executor.api.get_account()
+            equity = float(acct.equity)
+            last_equity = float(acct.last_equity)
+            daily_pnl = equity - last_equity
+            if last_equity > 0:
+                daily_pct = (daily_pnl / last_equity) * 100
         except:
             conn = "error_connecting"
             
@@ -55,7 +65,10 @@ def health_check():
         "status": "system_active", 
         "mode": settings.TRADING_MODE, 
         "risk_limit": settings.MAX_RISK_PER_TRADE_PERCENT,
-        "alpaca_status": conn
+        "alpaca_status": conn,
+        "equity": equity,
+        "daily_pnl": daily_pnl,
+        "daily_pct": daily_pct
     }
 
 @app.get("/scan")
