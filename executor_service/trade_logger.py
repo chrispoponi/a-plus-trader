@@ -16,13 +16,101 @@ class TradeLogger:
     def __init__(self):
         self.api = None
         try:
-             self.api = tradeapi.REST(
+            self.api = tradeapi.REST(
                 settings.APCA_API_KEY_ID,
                 settings.APCA_API_SECRET_KEY,
                 settings.APCA_API_BASE_URL,
                 api_version='v2'
             )
-        except: pass
+            # Rehydrate from broker on cold start (for ephemeral cloud storage)
+            self.hydrate_history()
+        except Exception as e:
+            print(f"Logger Init Error: {e}")
+
+    def hydrate_history(self):
+        """
+        Rebuilds Journal from Alpaca Closed Orders.
+        """
+        if not self.api: return
+        print("🦅 HYDRATING HISTORY FROM ALPACA...")
+        
+        try:
+            # 1. Fetch recent closed orders (Exit candidates)
+            orders = self.api.list_orders(status='closed', limit=50, direction='desc')
+            if not orders: return
+
+            # Load (empty) Journal
+            if os.path.exists(JOURNAL_FILE):
+                try: journal = pd.read_csv(JOURNAL_FILE)
+                except: journal = pd.DataFrame()
+            else:
+                journal = pd.DataFrame()
+                
+            new_rows = []
+            
+            # Simple reconstruction
+            for o in orders:
+                if not o.filled_at: continue
+                
+                # Check if this order is already 'known' (via trade_id or fuzzy match)
+                # Fuzzy: Symbol + Exit time match?
+                # We'll skip complex dedup for now, just check if symbol is in journal? 
+                # No, that prevents multiple trades.
+                # Check unique based on timestamp string?
+                ts = str(o.filled_at).replace('+00:00', '')
+                
+                # If we have a journal, check if this exit time exists
+                if not journal.empty and "exit_time" in journal.columns:
+                     # Check if any row has matching exit_time
+                     if journal["exit_time"].astype(str).str.contains(ts[:19]).any():
+                         continue
+
+                # It's a new (recovered) trade.
+                # Is it an entry or exit?
+                # If Side == Sell (usually exit for long).
+                # If Side == Buy (usually exit for short).
+                # We'll treat every CLOSED order as a 'Trade Record' for the table.
+                
+                # Try to find matching entry (naive)
+                entry_price = float(o.filled_avg_price) # Default to break-even if unknown
+                pnl = 0.0
+                
+                # ... (Smart matching logic could go here) ...
+                
+                row = {
+                    "trade_id": str(uuid.uuid4()),
+                    "symbol": o.symbol,
+                    "bucket": "RECOVERED",
+                    "side": o.side,
+                    "entry_time": o.created_at,
+                    "entry_price": entry_price, 
+                    "exit_time": o.filled_at,
+                    "exit_price": float(o.filled_avg_price),
+                    "qty": float(o.qty),
+                    "stop_price": None,
+                    "target_price": None,
+                    "risk_dollars": 0,
+                    "pnl_dollars": 0,
+                    "pnl_percent": 0,
+                    "r_multiple": 0,
+                    "holding_minutes": 0,
+                    "status": "CLOSED",
+                    "notes": f"Recovered Order {o.id}"
+                }
+                new_rows.append(row)
+                
+            if new_rows:
+                df = pd.DataFrame(new_rows)
+                if not journal.empty:
+                    journal = pd.concat([journal, df], ignore_index=True)
+                else:
+                    journal = df
+                journal.to_csv(JOURNAL_FILE, index=False)
+                print(f"✅ HYDRATED {len(new_rows)} historical records.")
+                self.generate_analytics()
+                
+        except Exception as e:
+            print(f"Hydration Failed: {e}")
 
     def log_trade_entry(self, symbol, bucket, qty, entry_price, stop, target):
         """
