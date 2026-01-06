@@ -113,18 +113,20 @@ class TradeLogger:
         except Exception as e:
             print(f"Hydration Failed: {e}")
 
-    def log_trade_entry(self, symbol, bucket, qty, entry_price, stop, target):
+    def log_trade_entry(self, symbol, bucket, qty, entry_price, stop, target, score=0, setup_name="Unknown"):
         """
-        Logs a new trade immediately upon execution.
+        Logs a new trade immediately upon execution, including Score and Setup.
         """
-        risk_per_share = abs(entry_price - stop)
+        risk_per_share = abs(entry_price - stop) if stop else 0
         risk_dollars = risk_per_share * qty
 
         trade = {
             "trade_id": str(uuid.uuid4()),
             "symbol": symbol,
             "bucket": bucket,
-            "side": "LONG",
+            "setup": setup_name,
+            "score": score,
+            "side": "LONG" if qty > 0 else "SHORT",
             "entry_time": datetime.utcnow(),
             "entry_price": entry_price,
             "exit_time": None,
@@ -138,6 +140,14 @@ class TradeLogger:
             "r_multiple": None,
             "holding_minutes": None,
             "status": "OPEN",
+            "notes": ""
+        }
+        
+        df = pd.DataFrame([trade])
+        # Append to CSV
+        header = not os.path.exists(JOURNAL_FILE)
+        df.to_csv(JOURNAL_FILE, mode='a', header=header, index=False)
+        print(f"📝 LOGGED ENTRY: {symbol} ({bucket}) - Score: {score}")
             "notes": ""
         }
 

@@ -179,7 +179,9 @@ class OrderExecutor:
                     qty=qty,
                     entry_price=plan.entry,
                     stop=plan.stop_loss,
-                    target=plan.take_profit
+                    target=plan.take_profit,
+                    score=candidate.scores.overall_rank_score,
+                    setup_name=candidate.setup_name
                 )
             except Exception as log_err:
                 print(f"LOGGER FAIL: {log_err}")
