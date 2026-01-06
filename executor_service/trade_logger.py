@@ -148,16 +148,7 @@ class TradeLogger:
         header = not os.path.exists(JOURNAL_FILE)
         df.to_csv(JOURNAL_FILE, mode='a', header=header, index=False)
         print(f"📝 LOGGED ENTRY: {symbol} ({bucket}) - Score: {score}")
-            "notes": ""
-        }
 
-        df = pd.DataFrame([trade])
-        if os.path.exists(JOURNAL_FILE):
-            df.to_csv(JOURNAL_FILE, mode="a", header=False, index=False)
-        else:
-            df.to_csv(JOURNAL_FILE, index=False)
-            
-        print(f"📝 LOGGED TRADE: {symbol} in {JOURNAL_FILE}")
 
     def sync_open_positions(self):
         """
@@ -328,6 +319,12 @@ class TradeLogger:
         closed = df[df["status"] == "CLOSED"].copy()
         
         if closed.empty: return {"msg": "No closed trades yet"}
+        
+        # Ensure Numeric Types
+        cols = ["pnl_dollars", "r_multiple", "holding_minutes"]
+        for c in cols:
+             if c in closed.columns:
+                 closed[c] = pd.to_numeric(closed[c], errors='coerce').fillna(0.0)
         
         summary = {
             "total_trades": len(closed),

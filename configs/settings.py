@@ -15,6 +15,7 @@ class Settings:
     WEBHOOK_TOKEN = os.getenv("WEBHOOK_TOKEN", "")
     SECRET_KEY = os.getenv("SECRET_KEY", "dev_secret")
     API_PASSWORD = os.getenv("API_PASSWORD", "harmonic_eagle_2025")
+    DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 
     # Mode
     TRADING_MODE = TradingMode(os.getenv("TRADING_MODE", "PAPER").upper())
