@@ -28,36 +28,49 @@ class OrderExecutor:
 
     def calculate_position_size(self, candidate: Candidate, account_equity: float = 100000.0) -> int:
         """
-        Calculates position size using Aggressive Allocation Model.
-        Shares = Min( Risk_Shares, Cap_Shares )
+        Calculates position size using Dynamic Conviction Sizing.
+        Formula: Base Risk * (Score / Baseline)^2
         """
         plan = candidate.trade_plan
         price = plan.entry
         if price <= 0: return 0
         
-        # 1. Determine Parameters based on Section
-        if candidate.section == "DAY_TRADE":
-            alloc_pct = 0.20 # 20% of Account
-            risk_pct = 0.015 # 1.5% Risk
-        else: # SWING
-            alloc_pct = 0.14 # 14% of Account
-            risk_pct = 0.025 # 2.5% Risk
-            
-        # 2. Risk-Based Sizing (How many shares can I buy without losing > Risk%?)
-        stop_dist = abs(price - plan.stop_loss)
-        if stop_dist <= 0: stop_dist = price * 0.01 # Fallback to prevent divide by zero
+        # 1. Base Parameters
+        base_risk_pct = settings.MAX_RISK_PER_TRADE_PERCENT # e.g. 0.75
         
-        risk_dollars = account_equity * risk_pct
+        # 2. Conviction Scaling (The Quantitative Edge)
+        score = candidate.scores.overall_rank_score
+        baseline = 70.0
+        
+        # Squared Multiplier
+        multiplier = (score / baseline) ** 2
+        
+        # 3. Calculate Dynamic Risk Pct
+        scaled_risk_pct = base_risk_pct * multiplier
+        
+        # 4. Safety Caps (Floor 0.5%, Ceiling 2.0%)
+        final_risk_pct = max(0.50, min(scaled_risk_pct, 2.0))
+        
+        # 5. Calculate Shares
+        stop_dist = abs(price - plan.stop_loss)
+        if stop_dist <= 0: stop_dist = price * 0.01
+        
+        risk_dollars = account_equity * (final_risk_pct / 100.0)
         shares_risk = math.floor(risk_dollars / stop_dist)
         
-        # 3. Capital-Cap Sizing (How many shares until I hit Max Allocation?)
-        cap_dollars = account_equity * alloc_pct
+        # Max Alloc Cap (e.g. Max 25% of Portfolio in one stock)
+        max_alloc_pct = settings.MAX_PORTFOLIO_RISK_PERCENT / 100.0 # Using as Position Cap proxy? 
+        # Actually MAX_PORTFOLIO_RISK implies total risk. 
+        # Let's start with a hard 20% position cap rule to avoid concentration.
+        cap_dollars = account_equity * 0.20
         shares_cap = math.floor(cap_dollars / price)
         
-        # 4. Final Sizing (Conservative of the two)
         final_shares = min(shares_risk, shares_cap)
         
-        return max(final_shares, 1) # Min 1
+        if final_shares > 0:
+            print(f"⚖️ SIZING [{candidate.symbol}]: Score {score:.0f} -> Risk {final_risk_pct:.2f}% (Base {base_risk_pct}%). Qty: {final_shares}")
+            
+        return max(final_shares, 1)
 
     def check_risk_compliance(self, symbol: str) -> str:
         """
