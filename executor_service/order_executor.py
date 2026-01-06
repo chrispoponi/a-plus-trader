@@ -215,5 +215,58 @@ class OrderExecutor:
             print(f"EXECUTION FAILED: {symbol} - {e}")
             return f"ERROR_{str(e)}"
 
+    def ensure_protective_stops(self) -> list:
+        """
+        Safety Net: Scans for open positions without active Stop Loss orders.
+        If found, places an emergency Stop Loss at 2.0% risk from CURRENT price.
+        Returns list of actions taken.
+        """
+        if not self.api: return []
+        
+        actions = []
+        try:
+            positions = self.api.list_positions()
+            open_orders = self.api.list_orders(status='open')
+            
+            # Build map of covered symbols (Checking for Stop types)
+            covered = set()
+            for o in open_orders:
+                if o.type in ['stop', 'stop_limit', 'trailing_stop']:
+                    covered.add(o.symbol)
+                    
+            for p in positions:
+                if p.symbol not in covered:
+                    # NAKED POSITION FOUND
+                    sym = p.symbol
+                    qty_val = float(p.qty)
+                    qty_int = abs(int(qty_val))
+                    curr = float(p.current_price)
+                    side = 'sell' if qty_val > 0 else 'buy'
+                    
+                    # Emergency Logic: 2.0% distance (Wide enough to avoid noise, tight enough to save account)
+                    dist = curr * 0.02
+                    stop_price = round(curr - dist, 2) if side == 'sell' else round(curr + dist, 2)
+                    
+                    try:
+                        self.api.submit_order(
+                            symbol=sym,
+                            qty=qty_int,
+                            side=side,
+                            type='stop',
+                            time_in_force='gtc',
+                            stop_price=stop_price
+                        )
+                        msg = f"🛡️ AUTO-HEALED: {sym} (Added Safety Stop @ {stop_price})"
+                        actions.append(msg)
+                        print(msg)
+                    except Exception as e:
+                        err = f"❌ FAILED TO HEAL {sym}: {e}"
+                        actions.append(err)
+                        print(err)
+        except Exception as cx:
+            print(f"Watchdog Error: {cx}")
+            
+        return actions
+
 # Global Instance
 executor = OrderExecutor()

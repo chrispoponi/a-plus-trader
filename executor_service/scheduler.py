@@ -122,6 +122,19 @@ def check_trade_exits():
     except Exception as e:
         print(f"Error checking exits: {e}")
 
+def risk_watchdog():
+    """
+    Periodically checks for NAKED positions (No Stops) and heals them.
+    """
+    try:
+        from executor_service.order_executor import executor
+        actions = executor.ensure_protective_stops()
+        if actions:
+            msg = "\n".join(actions)
+            notifier.send_message("🛡️ RISK WATCHDOG TRIGGERED", msg, color=0xffaa00)
+    except Exception as e:
+        print(f"Watchdog Fail: {e}")
+
 def start_scheduler():
     # New York Time
     ny_tz = pytz.timezone("America/New_York")
@@ -132,6 +145,14 @@ def start_scheduler():
         check_trade_exits,
         IntervalTrigger(minutes=5),
         id="exit_poller"
+    )
+    
+    # 0.5 Risk Watchdog (Every 5 mins, offset by 2 mins?)
+    # We can just run it every 5 mins.
+    scheduler.add_job(
+        risk_watchdog,
+        IntervalTrigger(minutes=5),
+        id="risk_watchdog"
     )
     
     # 1. Morning Prep (9:45 AM)
