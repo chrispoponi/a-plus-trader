@@ -154,6 +154,14 @@ def start_scheduler():
         IntervalTrigger(minutes=5),
         id="risk_watchdog"
     )
+
+    # 0.75 Peak Exit Manager (Every 5 mins)
+    executor.api # Ensure connection
+    scheduler.add_job(
+        executor.manage_peak_exits,
+        IntervalTrigger(minutes=5),
+        id="peak_manager"
+    )
     
     # 1. Morning Prep (9:45 AM)
     scheduler.add_job(

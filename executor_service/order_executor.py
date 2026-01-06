@@ -270,5 +270,98 @@ class OrderExecutor:
             
         return actions
 
+    async def manage_peak_exits(self):
+        """
+        PROFIT PROTECTOR:
+        Loops through active LONG positions.
+        Checks for 'Peak Exhaustion' (Price rising, Volume falling).
+        If detected, TIGHTENS the Stop Loss (aggregates to a Trailing Stop).
+        """
+        if not self.api: return
+        
+        from strategy_engine.data_loader import DataLoader
+        dl = DataLoader()
+        
+        print("🦅 CHECKING FOR PEAK EXHAUSTION...")
+        
+        try:
+            positions = self.api.list_positions()
+            for p in positions:
+                if p.side != 'long': continue # Only managing Longs for now
+                
+                symbol = p.symbol
+                qty = float(p.qty)
+                current_price = float(p.current_price)
+                
+                # 1. Fetch Data (5min candles for sensitivity)
+                data_map = dl.fetch_intraday_snapshot([symbol], timeframe='5Min')
+                if symbol not in data_map: continue
+                
+                df = data_map[symbol].get('intraday_df')
+                if df is None or df.empty: continue
+                
+                # 2. Calc Exhaustion Logic
+                # (Replicating backtest logic)
+                df['avg_vol'] = df['volume'].rolling(20).mean()
+                df['vol_ratio'] = df['volume'] / df['avg_vol']
+                df['high_low'] = df['high'] - df['low']
+                df['atr'] = df['high_low'].rolling(14).mean()
+                
+                curr = df.iloc[-1]
+                prev = df.iloc[-2]
+                
+                # Signal: Price Up, Volume Weak (< 90% avg)
+                price_up = curr['close'] > prev['close']
+                vol_weak = curr['vol_ratio'] < 0.9
+                is_exhausted = price_up and vol_weak
+                
+                # 3. Determine 'Tight Stop' Price
+                atr = curr['atr'] if curr['atr'] > 0 else (current_price * 0.01)
+                
+                if is_exhausted:
+                    # TIGHTEN: 0.5 ATR Trail
+                    proposed_stop = current_price - (0.5 * atr)
+                    mode = "EXHAUSTION (Tight)"
+                else:
+                    # STANDARD TRAIL: 2.0 ATR (Standard Wave Ride)
+                    proposed_stop = current_price - (2.0 * atr)
+                    mode = "STANDARD (Wide)"
+                    
+                proposed_stop = round(proposed_stop, 2)
+                
+                # 4. Update Existing Stop Order
+                # Find the open stop order
+                orders = self.api.list_orders(status='open', symbol=symbol)
+                stop_order = None
+                for o in orders:
+                    if o.type in ['stop', 'stop_limit', 'trailing_stop']:
+                        stop_order = o
+                        break
+                
+                if stop_order:
+                    current_stop_price = float(stop_order.stop_price) if stop_order.stop_price else 0
+                    
+                    # RATCHET LOGIC: Only move UP
+                    if proposed_stop > current_stop_price:
+                        # Safety Check: Don't move stop ABOVE current price
+                        if proposed_stop < current_price:
+                            print(f"🌊 RATCHET: {symbol} [{mode}] | Moving Stop {current_stop_price} -> {proposed_stop}")
+                            try:
+                                self.api.replace_order(
+                                    order_id=stop_order.id,
+                                    stop_price=proposed_stop
+                                )
+                                from utils.notifications import notifier
+                                notifier.send_message(
+                                    f"🌊 PEAK MANAGER: {symbol}",
+                                    f"Locked Profit. Stop moved to ${proposed_stop} ({mode}).\nPrice: ${current_price}",
+                                    color=0x00ff00
+                                )
+                            except Exception as replace_err:
+                                print(f"Generic Replace Error: {replace_err}")
+
+        except Exception as e:
+            print(f"Peak Manager Error: {e}")
+            
 # Global Instance
 executor = OrderExecutor()
