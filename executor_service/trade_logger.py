@@ -36,7 +36,8 @@ class TradeLogger:
         
         try:
             # 1. Fetch recent closed orders (Exit candidates)
-            orders = self.api.list_orders(status='closed', limit=50, direction='desc')
+            # Increase limit to skip over "Cancelled" noise
+            orders = self.api.list_orders(status='closed', limit=200, direction='desc')
             if not orders: return
 
             # Load (empty) Journal
