@@ -360,8 +360,18 @@ async def on_startup():
         report = trade_logger.hydrate_history()
         
         notifier.send_message("🦅 HARMONIC EAGLE: ONLINE", f"System Active. {report}", color=0x00ff00)
+        
+        # --- IMMEDIATE SAFETY AUDIT ---
+        # User requested verification of all stops (e.g. SOFI expired)
+        from executor_service.order_executor import executor
+        audit = executor.ensure_protective_stops()
+        if audit:
+            notifier.send_message("🛡️ STARTUP AUDIT", f"Fixed Naked Positions:\n" + "\n".join(audit), color=0xffaa00)
+        else:
+             print("🛡️ SAFE: All positions have stops.")
+            
     except Exception as e:
-        notifier.send_message("🦅 HARMONIC EAGLE: ONLINE", f"System Active. Hydration Error: {e}", color=0x00ff00)
+        notifier.send_message("🦅 HARMONIC EAGLE: ONLINE", f"System Active. Starup Error: {e}", color=0x00ff00)
     
     # Internal Heartbeat Loop
     import asyncio

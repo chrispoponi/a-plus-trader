@@ -183,6 +183,30 @@ class OrderExecutor:
             
             order = self.api.submit_order(**order_args)
             
+            # --- DISCORD NOTIFICATION ---
+            try:
+                from utils.notifications import notifier
+                
+                # Calculate R-Risk/Reward
+                risk = abs(en - sl) if sl else 1
+                reward = abs(tp - en) if tp else 1
+                rr = reward / risk if risk > 0 else 0
+                
+                msg = (
+                    f"**SYMBOL:** {symbol} ({side.upper()})\n"
+                    f"**Qty:** {qty}\n"
+                    f"**Entry:** ${en:.2f}\n"
+                    f"**Stop:** ${sl:.2f}\n"
+                    f"**Target:** ${tp:.2f} ({rr:.1f}R)\n"
+                    f"**Score:** {candidate.scores.overall_rank_score}/100\n"
+                    f"**Setup:** {candidate.setup_name}\n"
+                    f"**Type:** {type_order.upper()} ({tif.upper()})"
+                )
+                
+                notifier.send_message(f"🚨 TRADE EXECUTED: {symbol}", msg, color=0xffff00)
+            except Exception as note_err:
+                print(f"Notification Success Error: {note_err}")
+            
             # --- JOURNAL LOGGING ---
             try:
                 from executor_service.trade_logger import trade_logger
