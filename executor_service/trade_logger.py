@@ -61,48 +61,34 @@ class TradeLogger:
                 if out_order.id in processed_order_ids: continue
                 if not out_order.filled_at: continue # Skip Cancelled
                 
-                # We care about CLOSING trades (Exits) to log PnL
+                # CASE A: LONG EXIT (Sell)
                 if out_order.side == 'sell':
                     symbol = out_order.symbol
                     
-                    # Check if already entering in Journal (Avoid Dupes)
+                    # Check Dupes (Common Logic)
                     ts_str = str(out_order.filled_at)[:19] 
                     if not journal.empty and "exit_time" in journal.columns:
-                        # Improved Dupe Check with Repair Logic
                         mask = journal["exit_time"].astype(str).str.contains(ts_str)
                         if mask.any():
-                             # Check if existing record has PnL (valid) or is a 'Ghost' (0 PnL)
                              existing = journal.loc[mask]
                              has_pnl = False
                              if "pnl_dollars" in existing.columns:
                                  vals = pd.to_numeric(existing["pnl_dollars"], errors='coerce').fillna(0)
-                                 # If any matching row has abs(pnl) > 0.01, we consider it valid
-                                 if (vals.abs() > 0.01).any():
-                                     has_pnl = True
-                             
-                             if has_pnl:
-                                 continue
-                             else:
-                                 # It's a Ghost Record (0 PnL). Remove it to allow overwrite.
-                                 journal = journal.loc[~mask]
-                                 # print(f"Repairing record for {symbol}")
+                                 if (vals.abs() > 0.01).any(): has_pnl = True
+                             if has_pnl: continue
+                             else: journal = journal.loc[~mask] # Overwrite Ghost
                     
                     exit_price = float(out_order.filled_avg_price)
                     qty = float(out_order.qty)
-                    exit_time = out_order.filled_at
+                    entry_price = exit_price 
+                    entry_time = out_order.filled_at
                     
-                    entry_price = exit_price # Default (Break Even)
-                    entry_time = exit_time
-                    matched = False
-                    
-                    # Look ahead (back in time) for the Buyer
+                    # Match Buyer
                     for j in range(i + 1, len(orders)):
                         in_order = orders[j]
                         if in_order.symbol == symbol and in_order.side == 'buy':
-                            # Found a potential entry match (Naive LIFO)
                             entry_price = float(in_order.filled_avg_price)
                             entry_time = in_order.filled_at
-                            matched = True
                             break
                             
                     pnl_dollars = (exit_price - entry_price) * qty
@@ -127,10 +113,69 @@ class TradeLogger:
                         "r_multiple": 0,
                         "holding_minutes": 0,
                         "status": "CLOSED",
-                        "notes": "Recovered" if matched else "Recovered (Unmatched Entry)"
+                        "notes": "Recovered (Long)"
                     }
                     new_rows.append(row)
                     processed_order_ids.add(out_order.id)
+
+                # CASE B: SHORT EXIT (Buy to Cover)
+                elif out_order.side == 'buy':
+                    symbol = out_order.symbol
+                    found_open = False
+                    entry_price = float(out_order.filled_avg_price)
+                    entry_time = out_order.filled_at
+                    
+                    for j in range(i + 1, len(orders)):
+                        in_order = orders[j]
+                        if in_order.symbol == symbol and in_order.side == 'sell':
+                            entry_price = float(in_order.filled_avg_price)
+                            entry_time = in_order.filled_at
+                            found_open = True
+                            break
+                    
+                    if found_open:
+                        ts_str = str(out_order.filled_at)[:19]
+                        if not journal.empty and "exit_time" in journal.columns:
+                            mask = journal["exit_time"].astype(str).str.contains(ts_str)
+                            if mask.any():
+                                 existing = journal.loc[mask]
+                                 has_pnl = False
+                                 if "pnl_dollars" in existing.columns:
+                                     vals = pd.to_numeric(existing["pnl_dollars"], errors='coerce').fillna(0)
+                                     if (vals.abs() > 0.01).any(): has_pnl = True
+                                 if has_pnl: continue
+                                 else: journal = journal.loc[~mask]
+                        
+                        exit_price = float(out_order.filled_avg_price) # Buy Price
+                        qty = float(out_order.qty)
+                        
+                        pnl_dollars = (entry_price - exit_price) * qty
+                        cost_basis = entry_price * qty
+                        pnl_percent = (pnl_dollars / cost_basis) if cost_basis > 0 else 0.0
+                        
+                        row = {
+                            "trade_id": str(uuid.uuid4()),
+                            "symbol": symbol,
+                            "bucket": "RECOVERED",
+                            "side": "SHORT",
+                            "entry_time": entry_time,
+                            "entry_price": entry_price, 
+                            "exit_time": exit_time,
+                            "exit_price": exit_price,
+                            "qty": qty,
+                            "stop_price": None,
+                            "target_price": None,
+                            "risk_dollars": 0,
+                            "pnl_dollars": pnl_dollars,
+                            "pnl_percent": pnl_percent,
+                            "r_multiple": 0,
+                            "holding_minutes": 0,
+                            "status": "CLOSED",
+                            "notes": "Recovered (Short)"
+                        }
+                        new_rows.append(row)
+                        processed_order_ids.add(out_order.id)
+
                 
             msg = f"Hydration Complete. Scanned {len(orders)} orders."
             if new_rows:
