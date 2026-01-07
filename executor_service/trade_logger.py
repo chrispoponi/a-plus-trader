@@ -11,6 +11,7 @@ EQUITY_FILE = "uploads/equity_curve.csv"
 
 # Ensure uploads dir
 os.makedirs("uploads", exist_ok=True)
+print(f"📂 JOURNAL PATH: {os.path.abspath(JOURNAL_FILE)}")
 
 class TradeLogger:
     def __init__(self):
@@ -36,9 +37,13 @@ class TradeLogger:
         
         try:
             # 1. Fetch recent closed orders (Exit candidates)
-            # Increase limit to skip over "Cancelled" noise
-            orders = self.api.list_orders(status='closed', limit=200, direction='desc')
-            if not orders: return
+            # Increase limit to 500 to skip over "Cancelled" noise (Safety Seal rejects)
+            orders = self.api.list_orders(status='closed', limit=500, direction='desc')
+            if not orders: 
+                print("Hydration: No closed orders found.")
+                return "No Orders Found at Broker."
+            
+            print(f"Hydration: Scanned {len(orders)} closed orders.")
 
             # Load (empty) Journal
             if os.path.exists(JOURNAL_FILE):
@@ -50,17 +55,38 @@ class TradeLogger:
             new_rows = []
             
             # 2. Iterate and Match Trades (LIFO Approximation)
-            # Orders are DESC (Newest first)
             processed_order_ids = set()
             
             for i, out_order in enumerate(orders):
                 if out_order.id in processed_order_ids: continue
-                if not out_order.filled_at: continue
+                if not out_order.filled_at: continue # Skip Cancelled
                 
                 # We care about CLOSING trades (Exits) to log PnL
-                # Usually SELL for Longs.
                 if out_order.side == 'sell':
                     symbol = out_order.symbol
+                    
+                    # Check if already entering in Journal (Avoid Dupes)
+                    ts_str = str(out_order.filled_at)[:19] 
+                    if not journal.empty and "exit_time" in journal.columns:
+                        # Improved Dupe Check with Repair Logic
+                        mask = journal["exit_time"].astype(str).str.contains(ts_str)
+                        if mask.any():
+                             # Check if existing record has PnL (valid) or is a 'Ghost' (0 PnL)
+                             existing = journal.loc[mask]
+                             has_pnl = False
+                             if "pnl_dollars" in existing.columns:
+                                 vals = pd.to_numeric(existing["pnl_dollars"], errors='coerce').fillna(0)
+                                 # If any matching row has abs(pnl) > 0.01, we consider it valid
+                                 if (vals.abs() > 0.01).any():
+                                     has_pnl = True
+                             
+                             if has_pnl:
+                                 continue
+                             else:
+                                 # It's a Ghost Record (0 PnL). Remove it to allow overwrite.
+                                 journal = journal.loc[~mask]
+                                 # print(f"Repairing record for {symbol}")
+                    
                     exit_price = float(out_order.filled_avg_price)
                     qty = float(out_order.qty)
                     exit_time = out_order.filled_at
@@ -77,8 +103,6 @@ class TradeLogger:
                             entry_price = float(in_order.filled_avg_price)
                             entry_time = in_order.filled_at
                             matched = True
-                            # processed_order_ids.add(in_order.id) # Don't consume? Maybe partials? 
-                            # For simplicity, we won't consume, allowing multi-leg matching approx.
                             break
                             
                     pnl_dollars = (exit_price - entry_price) * qty
@@ -89,7 +113,7 @@ class TradeLogger:
                         "trade_id": str(uuid.uuid4()),
                         "symbol": symbol,
                         "bucket": "RECOVERED",
-                        "side": "LONG", # Assuming Long for now
+                        "side": "LONG",
                         "entry_time": entry_time,
                         "entry_price": entry_price, 
                         "exit_time": exit_time,
@@ -101,15 +125,14 @@ class TradeLogger:
                         "pnl_dollars": pnl_dollars,
                         "pnl_percent": pnl_percent,
                         "r_multiple": 0,
-                        "holding_minutes": 0, # Could calc delta
+                        "holding_minutes": 0,
                         "status": "CLOSED",
                         "notes": "Recovered" if matched else "Recovered (Unmatched Entry)"
                     }
                     new_rows.append(row)
                     processed_order_ids.add(out_order.id)
-
-
                 
+            msg = f"Hydration Complete. Scanned {len(orders)} orders."
             if new_rows:
                 df = pd.DataFrame(new_rows)
                 if not journal.empty:
@@ -119,9 +142,15 @@ class TradeLogger:
                 journal.to_csv(JOURNAL_FILE, index=False)
                 print(f"✅ HYDRATED {len(new_rows)} historical records.")
                 self.generate_analytics()
+                msg += f" Added {len(new_rows)} trades."
+            else:
+                msg += " No new trades added."
+                
+            return msg
                 
         except Exception as e:
             print(f"Hydration Failed: {e}")
+            return f"Hydration Error: {str(e)}"
 
     def log_trade_entry(self, symbol, bucket, qty, entry_price, stop, target, score=0, setup_name="Unknown"):
         """

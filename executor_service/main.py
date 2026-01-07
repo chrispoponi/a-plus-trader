@@ -351,7 +351,17 @@ from executor_service.scheduler import start_scheduler
 @app.on_event("startup")
 async def on_startup():
     start_scheduler()
-    notifier.send_message("🦅 HARMONIC EAGLE: ONLINE", "System Active. Strategies: Swing, Trend, Day, Options, Warrior.", color=0x00ff00)
+    try:
+        from executor_service.trade_logger import trade_logger
+        # Re-run hydration to get report (Init already ran it silently)
+        # Or just rely on the logs? 
+        # We will force-run it here to get the string, since Init doesn't return it.
+        # This is safe because of the Dupe Check we just added.
+        report = trade_logger.hydrate_history()
+        
+        notifier.send_message("🦅 HARMONIC EAGLE: ONLINE", f"System Active. {report}", color=0x00ff00)
+    except Exception as e:
+        notifier.send_message("🦅 HARMONIC EAGLE: ONLINE", f"System Active. Hydration Error: {e}", color=0x00ff00)
     
     # Internal Heartbeat Loop
     import asyncio
