@@ -49,56 +49,66 @@ class TradeLogger:
                 
             new_rows = []
             
-            # Simple reconstruction
-            for o in orders:
-                if not o.filled_at: continue
+            # 2. Iterate and Match Trades (LIFO Approximation)
+            # Orders are DESC (Newest first)
+            processed_order_ids = set()
+            
+            for i, out_order in enumerate(orders):
+                if out_order.id in processed_order_ids: continue
+                if not out_order.filled_at: continue
                 
-                # Check if this order is already 'known' (via trade_id or fuzzy match)
-                # Fuzzy: Symbol + Exit time match?
-                # We'll skip complex dedup for now, just check if symbol is in journal? 
-                # No, that prevents multiple trades.
-                # Check unique based on timestamp string?
-                ts = str(o.filled_at).replace('+00:00', '')
-                
-                # If we have a journal, check if this exit time exists
-                if not journal.empty and "exit_time" in journal.columns:
-                     # Check if any row has matching exit_time
-                     if journal["exit_time"].astype(str).str.contains(ts[:19]).any():
-                         continue
+                # We care about CLOSING trades (Exits) to log PnL
+                # Usually SELL for Longs.
+                if out_order.side == 'sell':
+                    symbol = out_order.symbol
+                    exit_price = float(out_order.filled_avg_price)
+                    qty = float(out_order.qty)
+                    exit_time = out_order.filled_at
+                    
+                    entry_price = exit_price # Default (Break Even)
+                    entry_time = exit_time
+                    matched = False
+                    
+                    # Look ahead (back in time) for the Buyer
+                    for j in range(i + 1, len(orders)):
+                        in_order = orders[j]
+                        if in_order.symbol == symbol and in_order.side == 'buy':
+                            # Found a potential entry match (Naive LIFO)
+                            entry_price = float(in_order.filled_avg_price)
+                            entry_time = in_order.filled_at
+                            matched = True
+                            # processed_order_ids.add(in_order.id) # Don't consume? Maybe partials? 
+                            # For simplicity, we won't consume, allowing multi-leg matching approx.
+                            break
+                            
+                    pnl_dollars = (exit_price - entry_price) * qty
+                    cost_basis = entry_price * qty
+                    pnl_percent = (pnl_dollars / cost_basis) if cost_basis > 0 else 0.0
+                    
+                    row = {
+                        "trade_id": str(uuid.uuid4()),
+                        "symbol": symbol,
+                        "bucket": "RECOVERED",
+                        "side": "LONG", # Assuming Long for now
+                        "entry_time": entry_time,
+                        "entry_price": entry_price, 
+                        "exit_time": exit_time,
+                        "exit_price": exit_price,
+                        "qty": qty,
+                        "stop_price": None,
+                        "target_price": None,
+                        "risk_dollars": 0,
+                        "pnl_dollars": pnl_dollars,
+                        "pnl_percent": pnl_percent,
+                        "r_multiple": 0,
+                        "holding_minutes": 0, # Could calc delta
+                        "status": "CLOSED",
+                        "notes": "Recovered" if matched else "Recovered (Unmatched Entry)"
+                    }
+                    new_rows.append(row)
+                    processed_order_ids.add(out_order.id)
 
-                # It's a new (recovered) trade.
-                # Is it an entry or exit?
-                # If Side == Sell (usually exit for long).
-                # If Side == Buy (usually exit for short).
-                # We'll treat every CLOSED order as a 'Trade Record' for the table.
-                
-                # Try to find matching entry (naive)
-                entry_price = float(o.filled_avg_price) # Default to break-even if unknown
-                pnl = 0.0
-                
-                # ... (Smart matching logic could go here) ...
-                
-                row = {
-                    "trade_id": str(uuid.uuid4()),
-                    "symbol": o.symbol,
-                    "bucket": "RECOVERED",
-                    "side": o.side,
-                    "entry_time": o.created_at,
-                    "entry_price": entry_price, 
-                    "exit_time": o.filled_at,
-                    "exit_price": float(o.filled_avg_price),
-                    "qty": float(o.qty),
-                    "stop_price": None,
-                    "target_price": None,
-                    "risk_dollars": 0,
-                    "pnl_dollars": 0,
-                    "pnl_percent": 0,
-                    "r_multiple": 0,
-                    "holding_minutes": 0,
-                    "status": "CLOSED",
-                    "notes": f"Recovered Order {o.id}"
-                }
-                new_rows.append(row)
+
                 
             if new_rows:
                 df = pd.DataFrame(new_rows)

@@ -7,8 +7,13 @@ from configs.settings import settings
 from strategy_engine.scanner_service import scanner
 from executor_service.upload_router import router as upload_router
 from executor_service.automation_router import router as automation_router
+from executor_service.debug_endpoints import router as debug_router
 
 app = FastAPI(title="A+ Trader Agent", version="1.0.0")
+
+app.include_router(upload_router)
+app.include_router(automation_router)
+app.include_router(debug_router)
 
 # SECURITY MIDDLEWARE
 @app.middleware("http")
@@ -18,7 +23,7 @@ async def verify_api_key(request: Request, call_next):
         return await call_next(request)
     
     # 2. Exempt Webhook (Has own auth) and Root Health Check
-    if request.url.path in ["/webhook", "/", "/docs", "/openapi.json"]:
+    if request.url.path in ["/webhook", "/", "/docs", "/openapi.json"] or request.url.path.startswith("/debug"):
         return await call_next(request)
         
     # 3. Verify Header
@@ -37,8 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(upload_router)
-app.include_router(automation_router)
+
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
