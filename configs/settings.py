@@ -28,6 +28,13 @@ class Settings:
     APCA_API_KEY_ID = os.getenv("APCA_API_KEY_ID", "")
     APCA_API_SECRET_KEY = os.getenv("APCA_API_SECRET_KEY", "")
     APCA_API_BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
+    
+    # Options Data Routing: Paper uses Paper API, Live uses Data API
+    _default_data = "https://data.alpaca.markets"
+    if TRADING_MODE == TradingMode.PAPER:
+        _default_data = APCA_API_BASE_URL
+        
+    APCA_API_DATA_URL = os.getenv("APCA_API_DATA_URL", _default_data)
 
     # Risk (Non-negotiable defaults from code if env missing, but env overrides)
     # User specified: 0.75% risk per trade, Uncapped Trades

@@ -113,7 +113,16 @@ class OrderExecutor:
         if risk_status != "OK":
             print(f"SKIP EXECUTION: {symbol} Risk Rejection: {risk_status}")
             return risk_status
-        # -----------------
+
+        # --- OPTIONS ROUTING ---
+        if candidate.section == "OPTIONS SETUP":
+             try:
+                 from executor_service.options_executor import options_executor
+                 return options_executor.execute_condor(candidate)
+             except Exception as oe:
+                 print(f"Options Routing Error: {oe}")
+                 return f"OPT_FAIL: {oe}"
+        # -----------------------
 
         side = "buy" if candidate.direction == Direction.LONG else "sell"
         plan = candidate.trade_plan

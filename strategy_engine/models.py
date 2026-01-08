@@ -47,6 +47,7 @@ class OptionsDetails(BaseModel):
     max_loss: float
     max_gain: float
     breakeven: List[float]
+    legs: Optional[Dict[str, str]] = None # {long_put: OCC_SYM, ...}
 
 class Scores(BaseModel):
     win_probability_estimate: float = Field(..., ge=0, le=100)
