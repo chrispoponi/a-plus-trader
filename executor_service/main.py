@@ -308,7 +308,9 @@ async def get_alpaca_positions():
                     "cost_basis": cb,
                     "unrealized_pl": upl,
                     "unrealized_plpc": uplpc,
-                    "current_price": cp
+                    "unrealized_plpc": uplpc,
+                    "current_price": cp,
+                    "asset_class": getattr(p, "asset_class", "us_equity") # Default to equity
                 })
             except Exception as ser_err:
                 print(f"Error parsing position {p.symbol}: {ser_err}")

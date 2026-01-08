@@ -114,7 +114,17 @@ const ControlCenter = () => {
                             {positions.length > 0 ? (
                                 positions.map((p) => (
                                     <tr key={p.symbol} className="hover:bg-gray-700/30 transition-colors">
-                                        <td className="px-6 py-4 font-bold text-white">{p.symbol}</td>
+                                        <td className="px-6 py-4 font-bold text-white">
+                                            <div className="flex items-center gap-2">
+                                                {p.symbol}
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${p.asset_class === 'us_option'
+                                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                                        : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                                    }`}>
+                                                    {p.asset_class === 'us_option' ? 'OPT' : 'STK'}
+                                                </span>
+                                            </div>
+                                        </td>
                                         <td className={`px-6 py-4 font-mono ${p.qty < 0 ? 'text-purple-400' : 'text-blue-400'}`}>
                                             {p.qty}
                                         </td>
