@@ -11,16 +11,18 @@ import {
 
 const PerformanceChart = ({ trades }) => {
     // 1. Process Data
-    // Filter closed trades and sort by time form oldest to newest
+    // Filter closed trades and sort strictly by time
     const data = trades
         .filter(t => t.status === 'CLOSED' || t.pnl_dollars !== 0)
         .sort((a, b) => new Date(a.entry_time) - new Date(b.entry_time))
         .reduce((acc, t) => {
             const prevEquity = acc.length > 0 ? acc[acc.length - 1].equity : 0;
+            const pnl = parseFloat(t.pnl_dollars) || 0;
+            // Accumulate Equity Curve
             acc.push({
-                time: new Date(t.entry_time).toLocaleDateString(),
-                pnl: t.pnl_dollars,
-                equity: prevEquity + (t.pnl_dollars || 0)
+                time: t.entry_time, // Keep raw for sorting, format in render
+                pnl: pnl,
+                equity: prevEquity + pnl
             });
             return acc;
         }, []);
@@ -50,7 +52,10 @@ const PerformanceChart = ({ trades }) => {
                             dataKey="time"
                             stroke="#9ca3af"
                             fontSize={12}
-                            tickFormatter={(val) => val.split('/')[0] + '/' + val.split('/')[1]}
+                            tickFormatter={(val) => {
+                                const d = new Date(val);
+                                return `${d.getMonth() + 1}/${d.getDate()}`;
+                            }}
                         />
                         <YAxis
                             stroke="#9ca3af"
