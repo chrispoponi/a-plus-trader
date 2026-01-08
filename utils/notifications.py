@@ -32,8 +32,14 @@ class NotificationService:
         }
         
         try:
-            requests.post(self.discord_webhook, json=payload)
+            resp = requests.post(self.discord_webhook, json=payload, timeout=5)
+            if resp.status_code in [200, 204]:
+                return True
+            else:
+                print(f"DISCORD ERROR {resp.status_code}: {resp.text}")
+                return False
         except Exception as e:
             print(f"Failed to send discord alert: {e}")
+            return False
 
 notifier = NotificationService()

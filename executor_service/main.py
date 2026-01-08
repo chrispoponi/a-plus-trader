@@ -67,6 +67,7 @@ def health_check():
             
     return {
         "status": "system_active", 
+        "version": "v3.6 (Hydration Fix + Audit)", 
         "mode": settings.TRADING_MODE, 
         "risk_limit": settings.MAX_RISK_PER_TRADE_PERCENT,
         "alpaca_status": conn,
@@ -74,6 +75,19 @@ def health_check():
         "daily_pnl": daily_pnl,
         "daily_pct": daily_pct
     }
+
+@app.get("/api/debug/test_discord")
+async def debug_discord():
+    """Forces a test notification to verify Webhook URL."""
+    try:
+        from utils.notifications import notifier
+        success = notifier.send_message("🔊 TEST", "Discord Connection Verified.", color=0x00ffff)
+        if success:
+            return {"status": "success", "message": "Notification Sent. Check Discord."}
+        else:
+            return {"status": "error", "message": "Notification Failed (Check Server Logs)."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/scan")
 async def trigger_scan():
