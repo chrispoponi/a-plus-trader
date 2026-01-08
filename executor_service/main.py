@@ -215,6 +215,23 @@ async def journal_history():
     from executor_service.trade_logger import trade_logger
     return trade_logger.get_trade_history()
 
+@app.get("/api/journal/download")
+async def download_journal():
+    """Downloads the trade_journal.csv file."""
+    import os
+    from fastapi.responses import FileResponse
+    
+    path = "uploads/trade_journal.csv"
+    if not os.path.exists(path):
+        from executor_service.trade_logger import trade_logger
+        # Force create via hydration if missing
+        trade_logger.hydrate_history()
+        
+    if os.path.exists(path):
+        return FileResponse(path, media_type='text/csv', filename=f"trade_journal_{datetime.now().strftime('%Y%m%d')}.csv")
+    else:
+        return {"error": "Journal file not found even after hydration attempt."}
+
 @app.post("/api/emergency/liquidate")
 async def emergency_liquidate(background_tasks: BackgroundTasks):
     """

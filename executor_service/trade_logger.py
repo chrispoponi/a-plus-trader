@@ -78,6 +78,9 @@ class TradeLogger:
                              if has_pnl: continue
                              else: journal = journal.loc[~mask] # Overwrite Ghost
                     
+                    if out_order.filled_avg_price is None or out_order.qty is None:
+                        continue
+
                     exit_price = float(out_order.filled_avg_price)
                     qty = float(out_order.qty)
                     entry_price = exit_price 

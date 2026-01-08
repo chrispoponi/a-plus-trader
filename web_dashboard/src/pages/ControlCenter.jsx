@@ -118,8 +118,8 @@ const ControlCenter = () => {
                                             <div className="flex items-center gap-2">
                                                 {p.symbol}
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${p.asset_class === 'us_option'
-                                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                                                        : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                                    : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                                                     }`}>
                                                     {p.asset_class === 'us_option' ? 'OPT' : 'STK'}
                                                 </span>
@@ -167,7 +167,15 @@ const ControlCenter = () => {
             <div className="bg-pro-card rounded-xl border border-gray-700 overflow-hidden">
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <h2 className="text-lg font-bold text-white">Recent Trade Log</h2>
-                    <span className="text-sm text-gray-400">{history.length} Entries</span>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-400">{history.length} Entries</span>
+                        <button
+                            onClick={() => api.downloadJournal()}
+                            className="bg-gray-700 hover:bg-gray-600 text-xs text-white px-3 py-1 rounded border border-gray-600 shadow transition-colors"
+                        >
+                            Download CSV
+                        </button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">

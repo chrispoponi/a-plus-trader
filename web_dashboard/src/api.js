@@ -72,6 +72,22 @@ export const api = {
             return [];
         }
     },
+    downloadJournal: async () => {
+        try {
+            const res = await axiosInstance.get(`/api/journal/download`, { responseType: 'blob' });
+            // Create Blob URL
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'trade_journal.csv');
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error("Journal Download Failed", error);
+            alert("Failed to download journal. Check Logs.");
+        }
+    },
     clearData: async () => {
         try {
             const res = await axiosInstance.post(`/api/data/clear`);
