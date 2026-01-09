@@ -27,6 +27,23 @@ const ControlCenter = () => {
         setLoading(false);
     };
 
+    const getStrategyBadge = (bucket) => {
+        const b = bucket ? bucket.toUpperCase() : 'UNKNOWN';
+        if (b.includes('DAY') || b.includes('SCALP') || b.includes('WARRIOR')) {
+            return { label: 'WARRIOR', style: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' };
+        }
+        if (b.includes('SWING')) {
+            return { label: 'SWING', style: 'bg-purple-500/20 text-purple-400 border border-purple-500/30' };
+        }
+        if (b.includes('OPTION')) {
+            return { label: 'OPTIONS', style: 'bg-pink-500/20 text-pink-400 border border-pink-500/30' };
+        }
+        if (b.includes('MANUAL')) {
+            return { label: 'MANUAL', style: 'bg-gray-500/20 text-gray-400' };
+        }
+        return { label: b, style: 'bg-blue-500/20 text-blue-400' };
+    };
+
     return (
         <div className="p-6 space-y-8">
             <h1 className="text-3xl font-bold text-white">MISSION CONTROL - LIVE VERIFIED</h1>
@@ -183,7 +200,7 @@ const ControlCenter = () => {
                             <tr>
                                 <th className="px-6 py-3">Time</th>
                                 <th className="px-6 py-3">Symbol</th>
-                                <th className="px-6 py-3">Type</th>
+                                <th className="px-6 py-3">Strategy</th>
                                 <th className="px-6 py-3">Entry</th>
                                 <th className="px-6 py-3">Exit</th>
                                 <th className="px-6 py-3 text-right">PnL</th>
@@ -193,28 +210,36 @@ const ControlCenter = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-700">
                             {history.length > 0 ? (
-                                history.slice().reverse().map((t) => (
-                                    <tr key={t.trade_id} className="hover:bg-gray-700/30 transition-colors">
-                                        <td className="px-6 py-4 font-mono text-gray-400">{new Date(t.entry_time).toLocaleTimeString()}</td>
-                                        <td className="px-6 py-4 font-bold text-white">{t.symbol}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${t.bucket === 'DAY_TRADE' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                                {t.bucket}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 font-mono">${t.entry_price?.toFixed(2)}</td>
-                                        <td className="px-6 py-4 font-mono">{t.exit_price ? `$${t.exit_price.toFixed(2)}` : '-'}</td>
-                                        <td className={`px-6 py-4 text-right font-bold ${t.pnl_dollars > 0 ? 'text-green-400' : t.pnl_dollars < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                                            {t.pnl_dollars ? `$${t.pnl_dollars.toFixed(2)}` : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-mono">{t.r_multiple ? `${t.r_multiple.toFixed(2)}R` : '-'}</td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`px-2 py-1 rounded text-xs ${t.status === 'CLOSED' ? 'bg-gray-700 text-gray-300' : 'bg-green-500/20 text-green-400 animate-pulse'}`}>
-                                                {t.status}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))
+                                history.slice().reverse().map((t) => {
+                                    const badge = getStrategyBadge(t.bucket);
+                                    return (
+                                        <tr key={t.trade_id} className="hover:bg-gray-700/30 transition-colors">
+                                            <td className="px-6 py-4 font-mono text-gray-400">{new Date(t.entry_time).toLocaleTimeString()}</td>
+                                            <td className="px-6 py-4 font-bold text-white max-w-xs truncate" title={t.notes || t.symbol}>
+                                                <div className="flex flex-col">
+                                                    <span>{t.symbol}</span>
+                                                    {t.notes && <span className="text-[10px] text-gray-600 font-normal">{t.notes.slice(0, 20)}</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded-[4px] text-[10px] font-bold tracking-wider uppercase ${badge.style}`}>
+                                                    {badge.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 font-mono">${t.entry_price?.toFixed(2)}</td>
+                                            <td className="px-6 py-4 font-mono">{t.exit_price ? `$${t.exit_price.toFixed(2)}` : '-'}</td>
+                                            <td className={`px-6 py-4 text-right font-bold ${t.pnl_dollars > 0 ? 'text-green-400' : t.pnl_dollars < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                                                {t.pnl_dollars ? `$${t.pnl_dollars.toFixed(2)}` : '-'}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-mono">{t.r_multiple ? `${t.r_multiple.toFixed(2)}R` : '-'}</td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={`px-2 py-1 rounded text-xs ${t.status === 'CLOSED' ? 'bg-gray-700 text-gray-300' : 'bg-green-500/20 text-green-400 animate-pulse'}`}>
+                                                    {t.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             ) : (
                                 <tr>
                                     <td colSpan="8" className="px-6 py-8 text-center text-gray-500 italic">No trades recorded locally.</td>
