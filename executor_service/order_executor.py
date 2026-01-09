@@ -195,10 +195,17 @@ class OrderExecutor:
                 order_args["limit_price"] = limit_price
             
             order = self.api.submit_order(**order_args)
-            
-            # --- DISCORD NOTIFICATION ---
+            print(f"ORDER SUBMITTED: {order.id}") # Critical Log
+
+            # --- DISCORD NOTIFICATION (PRIORITY) ---
             try:
                 from utils.notifications import notifier
+                
+                # Determine Bot Name
+                bot_name = "🦅 SWING BOT"
+                if candidate.section == "SCALP": bot_name = "⚔️ WARRIOR BOT"
+                elif candidate.section == "OPTIONS": bot_name = "🎯 OPTIONS BOT"
+                elif candidate.section == "DAY_TRADE": bot_name = "⚡ DAY BOT"
                 
                 # Calculate R-Risk/Reward
                 risk = abs(en - sl) if sl else 1
@@ -206,20 +213,19 @@ class OrderExecutor:
                 rr = reward / risk if risk > 0 else 0
                 
                 msg = (
-                    f"**SYMBOL:** {symbol} ({side.upper()})\n"
-                    f"**Qty:** {qty}\n"
-                    f"**Entry:** ${en:.2f}\n"
-                    f"**Stop:** ${sl:.2f}\n"
-                    f"**Target:** ${tp:.2f} ({rr:.1f}R)\n"
+                    f"**Action:** {side.upper()} {qty} shares\n"
+                    f"**Entry:** ${plan.entry:.2f}\n"
+                    f"**Stop:** ${plan.stop_loss:.2f}\n"
+                    f"**Target:** ${plan.take_profit:.2f} ({rr:.1f}R)\n"
                     f"**Score:** {candidate.scores.overall_rank_score}/100\n"
-                    f"**Setup:** {candidate.setup_name}\n"
-                    f"**Type:** {type_order.upper()} ({tif.upper()})"
+                    f"**Setup:** {candidate.setup_name}"
                 )
                 
-                notifier.send_message(f"🚨 TRADE EXECUTED: {symbol}", msg, color=0xffff00)
+                notifier.send_message(f"🚨 {bot_name}: {symbol}", msg, color=0x00ff00)
             except Exception as note_err:
-                print(f"Notification Success Error: {note_err}")
-            
+                print(f"DISCORD FAIL: {note_err}")
+            # ----------------------------
+
             # --- JOURNAL LOGGING ---
             try:
                 from executor_service.trade_logger import trade_logger
@@ -236,31 +242,7 @@ class OrderExecutor:
             except Exception as log_err:
                 print(f"LOGGER FAIL: {log_err}")
             # -----------------------
-
-            # --- DISCORD NOTIFICATION ---
-            try:
-                from utils.notifications import notifier
-                
-                # Determine Bot Name
-                bot_name = "🦅 SWING BOT"
-                if candidate.section == "SCALP": bot_name = "⚔️ WARRIOR BOT"
-                elif candidate.section == "OPTIONS": bot_name = "🎯 OPTIONS BOT"
-                elif candidate.section == "DAY_TRADE": bot_name = "⚡ DAY BOT"
-                
-                msg = (
-                    f"**Action:** {side.upper()} {qty} shares\n"
-                    f"**Entry:** ${plan.entry:.2f}\n"
-                    f"**Stop:** ${plan.stop_loss:.2f}\n"
-                    f"**Target:** ${plan.take_profit:.2f}\n"
-                    f"**Setup:** {candidate.setup_name}"
-                )
-                
-                notifier.send_message(f"{bot_name}: {symbol}", msg, color=0x00ff00)
-            except Exception as note_err:
-                print(f"DISCORD FAIL: {note_err}")
-            # ----------------------------
-
-            print(f"ORDER SUBMITTED: {order.id}")
+            
             return f"SUCCESS_{order.id}"
             
         except Exception as e:
