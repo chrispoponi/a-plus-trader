@@ -277,7 +277,6 @@ class OrderExecutor:
                     curr = float(p.current_price)
                     side = 'sell' if qty_val > 0 else 'buy'
                     
-                    # Emergency Logic: 2.0% distance (Wide enough to avoid noise, tight enough to save account)
                     dist = curr * 0.02
                     stop_price = round(curr - dist, 2) if side == 'sell' else round(curr + dist, 2)
                     
@@ -290,13 +289,24 @@ class OrderExecutor:
                             time_in_force='gtc',
                             stop_price=stop_price
                         )
-                        msg = f"🛡️ AUTO-HEALED: {sym} (Added Safety Stop @ {stop_price})"
+                        # NOTIFICATION
+                        msg = f"🛡️ AUTO-HEALED: {sym} (No Stop Found)\nAction: Placed Safety Stop @ {stop_price}"
                         actions.append(msg)
                         print(msg)
+                        
+                        try:
+                            from utils.notifications import notifier
+                            notifier.send_message(f"🛡️ RISK WATCHDOG: {sym}", msg, color=0xffaa00)
+                        except: pass
+                        
                     except Exception as e:
                         err = f"❌ FAILED TO HEAL {sym}: {e}"
                         actions.append(err)
                         print(err)
+                        try:
+                            from utils.notifications import notifier
+                            notifier.send_message(f"🛡️ RISK WATCHDOG FAILED: {sym}", err, color=0xff0000)
+                        except: pass
         except Exception as cx:
             print(f"Watchdog Error: {cx}")
             
