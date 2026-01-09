@@ -22,26 +22,33 @@ class MarketHunter:
     """
     Autonomous Market Scanner (The Hunter) - Dynamic Mode.
     
-    Uses Alpaca 'Most Actives' (ScreenerClient) to pull top volume leaders.
+    Uses Alpaca 'Most Actives' to find Volume Leaders.
+    Expands universe to include Top Losers and Gainers (Yahoo Finance proxy).
     """
     
     def __init__(self):
         try:
-            self.history_client = StockHistoricalDataClient(
-                settings.APCA_API_KEY_ID,
-                settings.APCA_API_SECRET_KEY
-            )
+            # 1. Screener Client (New SDK) for Most Actives
             self.screener_client = ScreenerClient(
                 settings.APCA_API_KEY_ID,
                 settings.APCA_API_SECRET_KEY
             )
-            print("hunter: Alpaca Clients (History + Screener) Established.")
+            
+            # 2. REST Client (Old SDK) for easy Snapshots & Bars
+            from alpaca_trade_api.rest import REST
+            self.api = REST(
+                settings.APCA_API_KEY_ID,
+                settings.APCA_API_SECRET_KEY,
+                base_url=settings.APCA_API_BASE_URL
+            )
+            print("hunter: Alpaca Clients Connected.")
+            
         except Exception as e:
             print(f"hunter: Connection Failed: {e}")
-            self.history_client = None
             self.screener_client = None
+            self.api = None
             
-        # Fallback list... (kept same)
+        # Fallback list...
         self.fallback_universe = [
             "NVDA","TSLA","AAPL","AMD","AMZN","META","GOOGL","MSFT","NFLX","COIN",
             "MARA","PLTR","DKNG","ROKU","SHOP","SQ","UBER","BA","DIS","PYPL",
@@ -52,148 +59,105 @@ class MarketHunter:
 
     def hunt(self) -> List[str]:
         """
-        Executes the 'Most Actives' scan and bucket logic.
+        Executes the 'Most Actives' scan + Top Losers logic.
         """
-        if not self.screener_client or not MostActivesRequest:
-            print("hunter [ERROR]: No Screener Client. Returning Fallback.")
+        if not self.screener_client or not self.api:
+            print("hunter [ERROR]: Clients missing. Returning Fallback.")
             return self.fallback_universe
 
-        print(f"\n🔎 HUNT: Scanning 'Most Actives' via Alpaca Screener...")
+        print(f"\n🔎 HUNT: Scanning 'Most Actives' & 'Top Movers'...")
         
         try:
-            # 1. Pull most active stocks (volume)
-            # Use MostActivesRequest (generic) not StockMostActivesRequest
-            req = MostActivesRequest(by="volume", top=100)
+            # 1. Pull most active stocks (volume) - Top 200 to catch movers
+            req = MostActivesRequest(by="volume", top=200)
             actives = self.screener_client.get_most_actives(req)
             
-            # Safe Symbol Extraction (Handle Object, Dict, or Tuple)
+            # Extract Symbols
             raw_symbols = []
             for a in actives:
-                if hasattr(a, 'symbol'): 
-                    raw_symbols.append(a.symbol)
-                elif isinstance(a, dict):
-                    raw_symbols.append(a.get('symbol'))
-                elif isinstance(a, tuple):
-                    # Likely (symbol, vol)
-                    raw_symbols.append(a[0])
-                else:
-                    print(f"hunter [WARN]: Unknown Active Format: {type(a)}")
+                if hasattr(a, 'symbol'): raw_symbols.append(a.symbol)
+                elif isinstance(a, dict): raw_symbols.append(a.get('symbol'))
+                elif isinstance(a, tuple): raw_symbols.append(a[0])
 
             print(f"hunter: Retrieved {len(raw_symbols)} active symbols.")
             
             if not raw_symbols:
-                 print("hunter: No actives returned. Using fallback.")
                  return self.fallback_universe[:50]
 
-            # 2. Pull 60 days of daily bars
-            end = datetime.now(pytz.UTC)
-            start = end - timedelta(days=60)
-            
-            # Batch fetch
-            bars = self.history_client.get_stock_bars(
-                StockBarsRequest(
-                    symbol_or_symbols=raw_symbols,
-                    timeframe=TimeFrame.Day,
-                    start=start,
-                    end=end,
-                    feed='iex'  # Use IEX for free tier compatibility
-                )
-            ).df
-            
-            if bars.empty:
-                print("hunter: No bar data returned.")
-                return self.fallback_universe[:50]
-
-            results = []
-            
-            # Process each symbol
-            # Alpaca-py returns MultiIndex (symbol, timestamp)
-            # Get list of unique symbols in the dataframe
-            if isinstance(bars.index, pd.MultiIndex):
-                unique_syms = bars.index.get_level_values(0).unique()
-            else:
-                # Should be multi-index, but handle edge case
-                unique_syms = bars['symbol'].unique() if 'symbol' in bars.columns else []
-
-            for sym in unique_syms:
+            # 2. Fetch Snapshots to get Price Change (Gainers/Losers)
+            # Chunking to be safe (though 200 is usually fine)
+            snapshots = {}
+            chunk_size = 100
+            for i in range(0, len(raw_symbols), chunk_size):
+                chunk = raw_symbols[i:i+chunk_size]
                 try:
-                    # Extract dataframe for this symbol
-                    if isinstance(bars.index, pd.MultiIndex):
-                        df = bars.loc[sym].copy()
-                    else:
-                        df = bars[bars['symbol'] == sym].copy()
-                        
-                    if len(df) < 50: continue
+                    snaps = self.api.get_snapshots(chunk)
+                    snapshots.update(snaps)
+                except Exception as e:
+                    print(f"hunter: Snapshot error: {e}")
 
-                    # Indicators
-                    df["sma20"] = df["close"].rolling(20).mean()
-                    df["sma50"] = df["close"].rolling(50).mean()
-                    df["atr"] = (df["high"] - df["low"]).rolling(14).mean()
+            # 3. Sort Candidates
+            candidates = []
+            for sym, snap in snapshots.items():
+                if not snap.daily_bar: continue
+                
+                price = snap.daily_bar.c
+                prev_close = snap.prev_daily_bar.c
+                volume = snap.daily_bar.v
+                
+                if price < 5 or price > 1000: continue # Filter noise/expensive
+                if not prev_close: continue
+                
+                pct_change = (price - prev_close) / prev_close
+                
+                candidates.append({
+                    "symbol": sym,
+                    "change": pct_change,
+                    "abs_change": abs(pct_change),
+                    "volume": volume,
+                    "price": price
+                })
 
-                    price = df["close"].iloc[-1]
-                    volume = df["volume"].iloc[-1]
-                    avg_vol = df["volume"].rolling(20).mean().iloc[-1]
+            # 4. Bucketing (The "Yahoo Finance" Import Logic)
+            df = pd.DataFrame(candidates)
+            if df.empty: return self.fallback_universe[:50]
+            
+            # A. Top Losers (Bottom 10)
+            top_losers = df.sort_values("change", ascending=True).head(15)
+            print(f"hunter: Found Top Losers: {top_losers['symbol'].tolist()}")
 
-                    # Basic Filters
-                    # Liquidity: > 2M Avg Vol
-                    # Price: $5 - $500
-                    if avg_vol < 2_000_000 or price < 5 or price > 500:
-                        continue
+            # B. Top Gainers (Top 10 - Trending)
+            top_gainers = df.sort_values("change", ascending=False).head(15)
+            
+            # C. Most Active (Top 15 by Volume) -- redundant as source is active, but ensures coverage
+            most_active = df.sort_values("volume", ascending=False).head(15)
+            
+            # Combine Sets
+            final_set = set()
+            final_set.update(top_losers['symbol'].tolist())
+            final_set.update(top_gainers['symbol'].tolist())
+            final_set.update(most_active['symbol'].tolist())
+            
+            # Backfill with original "Smart Quality" Logic if needed to reach 50
+            # (Re-using simplified score logic on the rest)
+            remaining_needed = 50 - len(final_set)
+            if remaining_needed > 0:
+                # Simple Smart Score: MovAvg Trend
+                # Only need 60 days bars for the candidates not yet chosen
+                # Optimization: Just pick high volume leftovers
+                leftovers = df[~df['symbol'].isin(final_set)]
+                if not leftovers.empty:
+                    # Sort by volume as proxy for quality
+                    fillers = leftovers.sort_values("volume", ascending=False).head(remaining_needed)
+                    final_set.update(fillers['symbol'].tolist())
 
-                    rel_vol = volume / avg_vol if avg_vol > 0 else 1.0
-                    atr_pct = df["atr"].iloc[-1] / price
-                    
-                    # Rate of Change
-                    roc_1d = (df["close"].iloc[-1] / df["close"].iloc[-2]) - 1
-                    roc_5d = (df["close"].iloc[-1] / df["close"].iloc[-6]) - 1
-
-                    # Scores
-                    day_score = (0.45 * rel_vol) + (0.35 * roc_1d) + (0.20 * atr_pct)
-                    
-                    trend_diff = (df["sma20"].iloc[-1] - df["sma50"].iloc[-1]) / price
-                    swing_score = (0.60 * trend_diff) + (0.25 * rel_vol) + (0.15 * roc_5d)
-                    
-                    trend_up = df["sma20"].iloc[-1] > df["sma50"].iloc[-1]
-
-                    results.append({
-                        "symbol": sym,
-                        "trend_20_over_50": trend_up,
-                        "day_score": day_score,
-                        "swing_score": swing_score
-                    })
-                except Exception:
-                    continue
+            final_list = list(final_set)
             
-            print(f"hunter: Calculated scores for {len(results)} valid candidates.")
-            
-            # 3. Select Top 50
-            res_df = pd.DataFrame(results)
-            if res_df.empty:
-                 return self.fallback_universe[:50]
-
-            # Day Bucket (Top 25)
-            day_bucket = res_df.sort_values("day_score", ascending=False).head(25)
-            
-            # Swing Bucket (Top 25 who are trending up)
-            swing_bucket = res_df[res_df["trend_20_over_50"]].sort_values("swing_score", ascending=False).head(25)
-            
-            # Merge
-            final_df = pd.concat([day_bucket, swing_bucket]).drop_duplicates("symbol").head(50)
-            
-            final_list = final_df["symbol"].tolist()
-            
-            # Backfill if we have < 50
-            if len(final_list) < 50:
-                needed = 50 - len(final_list)
-                print(f"hunter: Lists short ({len(final_list)}). Backfilling from fallback.")
-                for f in self.fallback_universe:
-                    if f not in final_list:
-                        final_list.append(f)
-                        if len(final_list) >= 50: break
-            
-            print(f"🔎 HUNT: Returning {len(final_list)} Dynamic Tickers.")
+            print(f"🔎 HUNT: Returning {len(final_list)} Tickers (Losers/Gainers/Active).")
             return final_list
 
         except Exception as e:
             print(f"hunter [ERROR]: {e}")
+            import traceback
+            traceback.print_exc()
             return self.fallback_universe
