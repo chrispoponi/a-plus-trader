@@ -116,6 +116,10 @@ class OrderExecutor:
 
         # --- OPTIONS ROUTING ---
         if candidate.section == "OPTIONS SETUP":
+             if not settings.OPTIONS_ENABLED:
+                 print(f"SKIP EXECUTION: {symbol} (Options Disabled)")
+                 return "SKIPPED_OPTIONS_DISABLED"
+
              try:
                  from executor_service.options_executor import options_executor
                  return options_executor.execute_condor(candidate)

@@ -23,6 +23,9 @@ class Settings:
     # Auto-Execution (Default: True for Paper, False for Live unless forced)
     _default_auto = "true" if TRADING_MODE != "LIVE" else "false"
     AUTO_EXECUTION_ENABLED = os.getenv("AUTO_EXECUTION_ENABLED", _default_auto).lower() == "true"
+    
+    # Feature Flags
+    OPTIONS_ENABLED = os.getenv("OPTIONS_ENABLED", "false").lower() == "true"
 
     # Alpaca
     APCA_API_KEY_ID = os.getenv("APCA_API_KEY_ID", "")
